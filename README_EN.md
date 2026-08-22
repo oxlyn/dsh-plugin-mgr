@@ -62,7 +62,7 @@ dsh plugin --profile web add dsh-plugin-mgr
 ### From source / GitHub
 
 ```sh
-git clone https://github.com/<your-username>/dsh-plugin-mgr.git
+git clone https://github.com/oxlyn/dsh-plugin-mgr.git
 cd dsh-plugin-mgr && pnpm install && pnpm run build
 
 # Run from the PARENT directory (dsh plugin add anchors relative
@@ -76,7 +76,7 @@ dsh web
 Install straight from GitHub (prepare builds dist automatically):
 
 ```sh
-dsh plugin --profile web add github:<your-username>/dsh-plugin-mgr
+dsh plugin --profile web add github:oxlyn/dsh-plugin-mgr
 ```
 
 ### Verify

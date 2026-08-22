@@ -61,7 +61,7 @@ dsh plugin --profile web add dsh-plugin-mgr
 ### 源码 / GitHub 安装
 
 ```sh
-git clone https://github.com/<你的用户名>/dsh-plugin-mgr.git
+git clone https://github.com/oxlyn/dsh-plugin-mgr.git
 cd dsh-plugin-mgr && pnpm install && pnpm run build
 
 # 在插件父目录执行（dsh plugin add 相对路径锚定调用目录）：
@@ -74,7 +74,7 @@ dsh web
 GitHub 直装（自动跑 prepare 构建出 dist）：
 
 ```sh
-dsh plugin --profile web add github:<你的用户名>/dsh-plugin-mgr
+dsh plugin --profile web add github:oxlyn/dsh-plugin-mgr
 ```
 
 ### 验证 / Verify
