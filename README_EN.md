@@ -106,6 +106,10 @@ dsh-plugin-mgr/
 └── dist/                 # build output (included in the published files field)
 ```
 
+## Links
+
+- [LinuxDo](https://linux.do)
+
 ## License
 
 [MIT](LICENSE)

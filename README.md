@@ -104,6 +104,10 @@ dsh-plugin-mgr/
 └── dist/                 # 构建产物（npm 发布包含在 files 字段中）
 ```
 
+## 友情链接 / Links
+
+- [LinuxDo](https://linux.do)
+
 ## License
 
 [MIT](LICENSE)
