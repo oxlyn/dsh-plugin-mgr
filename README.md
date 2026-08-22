@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
 
 > DeepSeek Harness (DSH) 插件：在 设置 → 插件 页面新增「插件管理」子页面——卡片式管理已安装插件，支持启停切换、详情查看与卸载。
+>
+> 中文 ｜ [EN](README_EN.md)
 
 ![插件管理面板](snapshot1.png)
 
