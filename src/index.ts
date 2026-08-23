@@ -247,20 +247,22 @@ async function enableRows(patchPath: string, rowIds: string[]): Promise<{ ok: bo
   })
 }
 
-/** 卸载清理：移除该插件的所有启停行，不留孤儿条目。 */
-function removeRowBlocks(patchPath: string, rowIds: string[]): void {
-  let text = ''
-  try {
-    text = readFileSync(patchPath, 'utf8')
-  } catch {
-    return
-  }
-  let next = text
-  for (const id of rowIds) {
-    const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: (?:true|false)\r?\n`, 'mu')
-    next = next.replace(blockRe, '')
-  }
-  if (next !== text) writeFileSync(patchPath, withPlaceholderRestored(next))
+/** 卸载清理：移除该插件的所有启停行，不留孤儿条目。走写队列，不与启停交错。 */
+async function removeRowBlocks(patchPath: string, rowIds: string[]): Promise<void> {
+  return queuedWrite(async () => {
+    let text = ''
+    try {
+      text = readFileSync(patchPath, 'utf8')
+    } catch {
+      return
+    }
+    let next = text
+    for (const id of rowIds) {
+      const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: (?:true|false)\r?\n`, 'mu')
+      next = next.replace(blockRe, '')
+    }
+    if (next !== text) writeFileSync(patchPath, withPlaceholderRestored(next))
+  })
 }
 
 // ── 每个包拥有的补丁行 ────────────────────────────────────────────────────
@@ -559,12 +561,14 @@ export function apply(ctx: Context) {
       if (current.self && !body.selfConfirm) {
         return sendJson(res, 400, { ok: false, error: '卸载自身需要 selfConfirm: true（面板已自动携带）' })
       }
-      // 先清理补丁层启停行，再让 dsh CLI 移除依赖与 bundle
-      removeRowBlocks(patchPath, current.rows)
+      // 先清理补丁层启停行，再让 dsh CLI 移除依赖与 bundle。
+      // CLI 运行期间新到的 toggle 请求可能又写回启停行，成功后再清一次兜底。
+      await removeRowBlocks(patchPath, current.rows)
       const result = await runDshPluginRemove(profile, pkg)
       if (result.code !== 0) {
         return sendJson(res, 500, { ok: false, error: `dsh plugin remove 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
       }
+      await removeRowBlocks(patchPath, current.rows)
       console.log(`[dsh-plugin-mgr] uninstalled ${pkg} from profile ${profile}`)
       sendJson(res, 200, { ok: true, name: pkg, output: result.output.slice(-500) })
     },
