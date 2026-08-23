@@ -19,7 +19,7 @@
 | 2 | Enable / disable | Writes `disabled: true/false` through the profile user patch layer (`cordis.patch.yml`); DSH HMR applies it in ~1s, survives restarts |
 | 3 | Expandable details | Click a card to expand: version / source (npm·GitHub·local classification + version range + clickable repository link) / description |
 | 4 | Uninstall | Uninstall button in the expanded details (with confirmation); cleans up patch rows first, then runs `dsh plugin --profile <name> remove <pkg>` |
-| 5 | Update check + one-click update | npm-sourced plugins are compared against the registry latest (results cached 5min); outdated cards show an "Update" badge and the details offer one-click update to latest; existing enable/disable state is preserved across updates |
+| 5 | Update check + one-click update | npm-sourced plugins are compared against the registry latest (results cached 5min); outdated cards show an "Update" badge and the details offer one-click update to latest; existing enable/disable state is preserved across updates; the latest version's npm publish time is fetched lazily and shown for outdated packages only |
 | 6 | Search | Toolbar search box (matches name/description/spec, case-insensitive); the count shows "x / y" while filtering, with a one-click clear when nothing matches |
 | 7 | Runtime error display | Listens to the host fiber status events: a plugin that failed to load gets a red "Load failed" state on its card with the error message in its details; recovery (HMR fix / rollback restart) clears it automatically |
 

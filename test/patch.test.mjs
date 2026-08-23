@@ -22,6 +22,7 @@ const {
   parseNpmrcRegistry,
   compareSemver,
   failureText,
+  publishTimeOf,
 } = _internal
 
 /** 建临时补丁文件；initial 为 undefined 表示不创建文件。 */
@@ -245,4 +246,16 @@ test('failureText: Error 取 message，其余 String()', () => {
   assert.equal(failureText('plain string'), 'plain string')
   assert.equal(failureText(undefined), 'undefined')
   assert.equal(failureText(null), 'null')
+})
+
+// ── publishTimeOf ──────────────────────────────────────────────────────────
+
+test('publishTimeOf: 提取指定版本发布时间，异常形状返回 null', () => {
+  const packument = { time: { created: '2026-01-01T00:00:00Z', modified: '2026-02-01T00:00:00Z', '1.0.0': '2026-01-01T00:00:01Z', '1.1.0': '2026-02-01T00:00:01Z' } }
+  assert.equal(publishTimeOf(packument, '1.1.0'), '2026-02-01T00:00:01Z')
+  assert.equal(publishTimeOf(packument, '9.9.9'), null)
+  assert.equal(publishTimeOf({ time: null }, '1.0.0'), null)
+  assert.equal(publishTimeOf({ time: ['array'] }, '1.0.0'), null)
+  assert.equal(publishTimeOf({}, '1.0.0'), null)
+  assert.equal(publishTimeOf(null, '1.0.0'), null)
 })

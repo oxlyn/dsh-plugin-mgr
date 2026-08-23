@@ -20,6 +20,16 @@ window.__ModuleLoader__.load({
         const React = require("react");
         const { useState, useEffect, useCallback } = React;
 
+        // 宿主平台模块（冻结表，dshmarket 同款确认框）。老宿主没有时
+        // require 抛错，回退 window.confirm 原生确认框。
+        let Modal = null, Button = null;
+        try {
+            const primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+            Modal = primitives.Modal;
+            Button = primitives.Button;
+        } catch { /* 平台模块不存在：hasModal 为 false，走原生确认 */ }
+        const hasModal = typeof Modal === "function" && typeof Button === "function";
+
         // ── 多语言词典（locale 服务，语言跟随 harness）─────────────────────────
         const NS = "dsh-plugin-mgr";
         const zh = {
@@ -62,6 +72,7 @@ window.__ModuleLoader__.load({
             updateAvailable: "可更新",
             latestVersion: "最新版本",
             latestVersionTitle: "最新版本 v{0}",
+            publishedAt: "发布于 {0}",
             update: "更新",
             updating: "更新中…",
             updateTitle: "更新到最新版本（npm registry）",
@@ -69,6 +80,7 @@ window.__ModuleLoader__.load({
             confirmUpdateSelf: "注意：这是插件管理器自己，更新期间本页面可能短暂失效。",
             updatedMsg: "{0} 已更新到 v{1}",
             updateFail: "{0} 更新失败：{1}",
+            updateSkipped: "{0} 仍为 v{1}：pnpm 供应链策略（minimumReleaseAge）可能静默跳过了发布过新的版本——稍后重试，或先装精确版本",
             empty: "该 profile 尚未安装任何插件。",
             loading: "加载中...",
             loadError: "读取已安装插件失败：",
@@ -81,6 +93,7 @@ window.__ModuleLoader__.load({
             confirmUninstall: "确定卸载 {0}@{1}？",
             confirmUninstallNoVer: "确定卸载 {0}？",
             confirmSelf: "注意：这是插件管理器自己，卸载后本页面将消失。",
+            cancel: "取消",
         };
         const en = {
             tab: "Plugin Manager",
@@ -122,6 +135,7 @@ window.__ModuleLoader__.load({
             updateAvailable: "Update",
             latestVersion: "Latest",
             latestVersionTitle: "Latest version v{0}",
+            publishedAt: "Published {0}",
             update: "Update",
             updating: "Updating…",
             updateTitle: "Update to the latest version (npm registry)",
@@ -129,6 +143,7 @@ window.__ModuleLoader__.load({
             confirmUpdateSelf: "Note: this is the plugin manager itself; this page may briefly go down during the update.",
             updatedMsg: "{0} updated to v{1}",
             updateFail: "Failed to update {0}: {1}",
+            updateSkipped: "{0} is still v{1}: the pnpm supply-chain policy (minimumReleaseAge) may have silently skipped a too-fresh release — retry later, or install an exact version first",
             empty: "No plugins installed in this profile.",
             loading: "Loading...",
             loadError: "Failed to load installed plugins: ",
@@ -141,6 +156,7 @@ window.__ModuleLoader__.load({
             confirmUninstall: "Uninstall {0}@{1}?",
             confirmUninstallNoVer: "Uninstall {0}?",
             confirmSelf: "Note: this is the plugin manager itself; this page will disappear after uninstalling.",
+            cancel: "Cancel",
         };
 
         // ── 样式表（一次性注入；类名 dshpm- 前缀隔离）────────────────────────
@@ -192,6 +208,8 @@ window.__ModuleLoader__.load({
 /* 小圆角标签：来源分类（中性）与「可更新」徽标（信息蓝）共用底样式 */
 .dshpm-pill { display:inline-flex; align-items:center; padding:0 8px; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:999px; font-size:11px; line-height:17px; white-space:nowrap; color:var(--dsw-alias-label-tertiary,#888); }
 .dshpm-pill.is-update { color:var(--dsw-alias-state-info-primary,#1967d2); border-color:var(--dsw-alias-state-info-primary,#1967d2); }
+/* 最新版本行里跟在版本号后的发布时间（弱化色，非等宽） */
+.dshpm-published { color:var(--dsw-alias-label-tertiary,#888); font-family:inherit; font-weight:400; }
 .dshpm-switch { display:inline-block; box-sizing:border-box; width:36px; height:20px; border-radius:10px; padding:2px; cursor:pointer; background:var(--dsw-alias-label-tertiary,#888); transition:background .16s; flex:none; }
 .dshpm-switch.is-on { background:var(--dsw-alias-state-success-primary,#1e8e3e); }
 .dshpm-switch.is-busy { opacity:.5; cursor:wait; }
@@ -205,12 +223,15 @@ window.__ModuleLoader__.load({
 .dshpm-field-val.is-code { font-family:var(--ds-font-family-code,monospace); }
 .dshpm-repo-link { color:var(--dsw-alias-state-info-primary,#1967d2); text-decoration:none; font-size:12px; word-break:break-all; }
 .dshpm-repo-link:hover { text-decoration:underline; }
-.dshpm-detail-actions { display:flex; justify-content:flex-end; margin-top:8px; }
+.dshpm-detail-actions { display:flex; justify-content:flex-end; align-items:center; gap:16px; margin-top:8px; }
 .dshpm-btn { border-radius:8px; padding:5px 14px; font-size:13px; line-height:1.5; cursor:pointer; border:1px solid var(--dsw-alias-border-l2,#ddd); color:var(--dsw-alias-label-secondary,#555); background:transparent; white-space:nowrap; transition:color .16s,border-color .16s,background .16s; }
 .dshpm-btn:hover:not(:disabled) { color:var(--dsw-alias-label-primary,#333); border-color:var(--dsw-alias-label-dimmed,#999); }
 .dshpm-btn:disabled { opacity:.5; cursor:not-allowed; }
 .dshpm-btn-danger { color:var(--dsw-alias-state-error-primary,#d32f2f); border-color:var(--dsw-alias-state-error-primary,#d32f2f); }
 .dshpm-btn-danger:hover:not(:disabled) { color:var(--dsw-alias-state-error-primary,#d32f2f); border-color:var(--dsw-alias-state-error-primary,#d32f2f); background:var(--dsw-alias-state-error-bg,#fce8e6); }
+/* 更新按钮：信息蓝（与「可更新」徽标同色系），与右侧卸载按钮拉开间距 */
+.dshpm-btn-update { color:var(--dsw-alias-state-info-primary,#1967d2); border-color:var(--dsw-alias-state-info-primary,#1967d2); }
+.dshpm-btn-update:hover:not(:disabled) { color:var(--dsw-alias-state-info-primary,#1967d2); border-color:var(--dsw-alias-state-info-primary,#1967d2); background:var(--dsw-alias-state-info-bg,#e8f0fe); }
 .dshpm-banner { font-size:12px; line-height:1.6; padding:8px 12px; border-radius:8px; word-break:break-all; }
 .dshpm-banner-ok { background:var(--dsw-alias-state-success-bg,#e6f4ea); color:var(--dsw-alias-state-success-primary,#1e8e3e); }
 .dshpm-banner-err { background:var(--dsw-alias-state-error-bg,#fce8e6); color:var(--dsw-alias-state-error-primary,#d32f2f); white-space:pre-wrap; }
@@ -249,6 +270,8 @@ window.__ModuleLoader__.load({
             const [refreshedAt, setRefreshedAt] = useState(null);
             // 展开状态：{ [name]: boolean }
             const [expanded, setExpanded] = useState({});
+            // 待确认操作（模态框）：null | { kind: 'uninstall' | 'update', row }
+            const [confirming, setConfirming] = useState(null);
             // 列表布局：1 = 单列，2 = 双列（localStorage 持久化）
             const COLUMNS_KEY = "dsh-plugin-mgr:columns";
             const [columns, setColumns] = useState(() => {
@@ -371,12 +394,6 @@ window.__ModuleLoader__.load({
             };
 
             const uninstall = async (row) => {
-            const self = row.self ? "\n\n" + t("confirmSelf") : "";
-            // 版本未知（'-'，如 link 断链）时确认文案不显示 @-
-            const confirmMsg = row.version !== "-"
-                ? fmt(t("confirmUninstall"), row.name, row.version)
-                : fmt(t("confirmUninstallNoVer"), row.name);
-            if (!window.confirm(confirmMsg + self)) return;
                 setPending((s) => ({ ...s, [row.name]: "uninstall" }));
                 setMessage(null);
                 try {
@@ -394,13 +411,16 @@ window.__ModuleLoader__.load({
             const update = async (row) => {
                 const info = updates[row.name];
                 const latest = (info && info.latest) || "";
-                const self = row.self ? "\n\n" + t("confirmUpdateSelf") : "";
-                if (!window.confirm(fmt(t("confirmUpdate"), row.name, latest) + self)) return;
                 setPending((s) => ({ ...s, [row.name]: "update" }));
                 setMessage(null);
                 try {
-                    await post("/api/plugin-manager/update", { name: row.name, selfConfirm: true });
-                    setMessage({ type: "ok", text: fmt(t("updatedMsg"), row.name, latest) });
+                    const json = await post("/api/plugin-manager/update", { name: row.name, selfConfirm: true });
+                    // updated=false：pnpm 供应链策略静默跳过（exit 0 但版本没变），如实提示
+                    if (json.updated === false) {
+                        setMessage({ type: "error", text: fmt(t("updateSkipped"), row.name, json.version || row.version) });
+                    } else {
+                        setMessage({ type: "ok", text: fmt(t("updatedMsg"), row.name, json.version || latest) });
+                    }
                     await loadData(true);
                     fetchUpdates();
                 } catch (e) {
@@ -408,6 +428,36 @@ window.__ModuleLoader__.load({
                 } finally {
                     clearPending(row.name);
                 }
+            };
+
+            // ── 确认门：有平台 Modal 走模态框（dshmarket 同款），否则原生 confirm ──
+            const confirmUninstallText = (row) => {
+                const self = row.self ? "\n\n" + t("confirmSelf") : "";
+                // 版本未知（'-'，如 link 断链）时确认文案不显示 @-
+                return (row.version !== "-"
+                    ? fmt(t("confirmUninstall"), row.name, row.version)
+                    : fmt(t("confirmUninstallNoVer"), row.name)) + self;
+            };
+
+            const beginUninstall = (row) => {
+                if (!hasModal) {
+                    if (!window.confirm(confirmUninstallText(row))) return;
+                    uninstall(row);
+                    return;
+                }
+                setConfirming({ kind: "uninstall", row });
+            };
+
+            const beginUpdate = (row) => {
+                if (!hasModal) {
+                    const info = updates[row.name];
+                    const latest = (info && info.latest) || "";
+                    const self = row.self ? "\n\n" + t("confirmUpdateSelf") : "";
+                    if (!window.confirm(fmt(t("confirmUpdate"), row.name, latest) + self)) return;
+                    update(row);
+                    return;
+                }
+                setConfirming({ kind: "update", row });
             };
 
             const h = React.createElement;
@@ -518,6 +568,10 @@ window.__ModuleLoader__.load({
                             // 更新检查结果（npm 源插件才有）；有新版时行内显示徽标
                             const upd = updates[row.name];
                             const canUpdate = !!upd && !!upd.update && !row.protected;
+                            // 发布时间（registry ISO 字符串），无效/缺失不显示
+                            const publishedText = upd && upd.publishedAt && !isNaN(Date.parse(upd.publishedAt))
+                                ? new Date(upd.publishedAt).toLocaleString()
+                                : null;
                             // 显示名去掉 npm scope（@user/pkg → pkg）；
                             // scope / github 用户名在「安装来源」字段里看（spec 含完整信息）
                             const displayName = row.name.replace(/^@[^/]+\//, "");
@@ -564,7 +618,8 @@ window.__ModuleLoader__.load({
                                     h("div", { className: "dshpm-actions" },
                                         canUpdate ? h("span", {
                                             className: "dshpm-pill is-update",
-                                            title: fmt(t("latestVersionTitle"), upd.latest),
+                                            title: fmt(t("latestVersionTitle"), upd.latest)
+                                                + (publishedText ? ` · ${fmt(t("publishedAt"), publishedText)}` : ""),
                                         }, t("updateAvailable")) : null,
                                         h("span", { className: `dshpm-state${row.error ? " is-err" : on ? " is-on" : ""}` },
                                             row.error ? t("stateError") : on ? t("stateOn") : t("stateOff")
@@ -622,7 +677,9 @@ window.__ModuleLoader__.load({
                                     canUpdate ? h("div", { className: "dshpm-field" },
                                         h("span", { className: "dshpm-field-key" }, t("latestVersion")),
                                         h("span", { className: "dshpm-field-val is-code", style: { color: "var(--dsw-alias-state-info-primary,#1967d2)" } },
-                                            `v${upd.latest}`
+                                            `v${upd.latest}`,
+                                            publishedText ? h("span", { className: "dshpm-published" },
+                                                ` · ${fmt(t("publishedAt"), publishedText)}`) : null
                                         )
                                     ) : null,
                                     h("div", { className: "dshpm-field" },
@@ -663,16 +720,16 @@ window.__ModuleLoader__.load({
                                     h("div", { className: "dshpm-detail-actions" },
                                         // 更新按钮：有新版且非宿主模块时显示（自身可更新，确认框有提示）
                                         canUpdate ? h("button", {
-                                            className: "dshpm-btn",
+                                            className: "dshpm-btn dshpm-btn-update",
                                             disabled: busy,
                                             title: t("updateTitle"),
-                                            onClick: () => update(row),
+                                            onClick: () => beginUpdate(row),
                                         }, p === "update" ? t("updating") : t("update")) : null,
                                         !row.protected && !row.self ? h("button", {
                                             className: "dshpm-btn dshpm-btn-danger",
                                             disabled: busy,
                                             title: t("uninstallTitle"),
-                                            onClick: () => uninstall(row),
+                                            onClick: () => beginUninstall(row),
                                         }, busy && p === "uninstall" ? t("uninstalling") : t("uninstall")) : h("span", {
                                             className: "dshpm-hint",
                                             title: row.self ? t("selfHint") : t("protectedToggle"),
@@ -681,7 +738,42 @@ window.__ModuleLoader__.load({
                                 ) : null
                             );
                         })
-                    )
+                    ),
+                // 确认模态框（dshmarket 同款平台 Modal）：更新 / 卸载 二次确认
+                confirming !== null && hasModal ? h(Modal, {
+                    open: true,
+                    onClose: () => setConfirming(null),
+                    title: confirming.kind === "update"
+                        ? fmt(t("confirmUpdate"), confirming.row.name,
+                            (updates[confirming.row.name] && updates[confirming.row.name].latest) || "")
+                        : confirming.row.version !== "-"
+                            ? fmt(t("confirmUninstall"), confirming.row.name, confirming.row.version)
+                            : fmt(t("confirmUninstallNoVer"), confirming.row.name),
+                    description: confirming.kind === "update" ? t("updateTitle") : t("uninstallTitle"),
+                    footer: h(React.Fragment, null,
+                        h(Button, { variant: "ghost", onClick: () => setConfirming(null) }, t("cancel")),
+                        h(Button, {
+                            variant: "primary",
+                            onClick: () => {
+                                const row = confirming.row;
+                                const isUpdate = confirming.kind === "update";
+                                setConfirming(null);
+                                if (isUpdate) update(row);
+                                else uninstall(row);
+                            },
+                        }, confirming.kind === "update" ? t("update") : t("uninstall"))
+                    ),
+                },
+                    // 自身操作的额外提示（弱化色小字）
+                    confirming.row.self ? h("p", {
+                        style: {
+                            fontSize: "12px",
+                            color: "var(--dsw-alias-label-tertiary,#888)",
+                            marginTop: "4px",
+                            marginBottom: "0",
+                        },
+                    }, confirming.kind === "update" ? t("confirmUpdateSelf") : t("confirmSelf")) : null
+                ) : null
             );
         }
 

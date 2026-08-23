@@ -61,6 +61,7 @@ export const _internal = {
   parseNpmrcRegistry,
   compareSemver,
   failureText,
+  publishTimeOf,
 }
 
 // ── profile 定位 ───────────────────────────────────────────────────────────
@@ -542,6 +543,8 @@ function compareSemver(a: string, b: string): number {
 interface LatestCacheEntry {
   latest: string
   fetchedAt: number
+  /** latest 版本的 npm 发布时间（ISO 字符串）。有更新的包才补查；null = 查过但 registry 没给 */
+  publishedAt?: string | null
 }
 
 /** name → registry latest 版本（带 TTL，避免频繁刷列表打爆 registry）。 */
@@ -561,6 +564,25 @@ async function fetchLatestVersion(name: string, registry: string): Promise<strin
   return manifest.version
 }
 
+/** 从完整 packument 的 time 字段提取指定版本的发布时间；形状异常返回 null。 */
+function publishTimeOf(manifest: unknown, version: string): string | null {
+  if (manifest === null || typeof manifest !== 'object') return null
+  const time = (manifest as Record<string, unknown>).time
+  if (time === null || typeof time !== 'object' || Array.isArray(time)) return null
+  const at = (time as Record<string, unknown>)[version]
+  return typeof at === 'string' && at !== '' ? at : null
+}
+
+/** 完整 packument 才有 time 字段（/latest 缩略文档没有）；只对有更新的包调用。 */
+async function fetchPublishTime(name: string, version: string, registry: string): Promise<string | null> {
+  const base = registry.replace(/\/+$/u, '')
+  const resp = await fetch(`${base}/${encodeURIComponent(name)}`, {
+    signal: AbortSignal.timeout(LATEST_FETCH_TIMEOUT_MS),
+  })
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return publishTimeOf(await resp.json(), version)
+}
+
 /**
  * 拉取 npm 来源插件的可更新信息。只对 npm 源（semver spec）检查——
  * github/local 源的「最新」不在 npm registry 上，无从比对。
@@ -576,19 +598,43 @@ async function collectUpdates(ctx: Context): Promise<Record<string, { latest: st
     const c = latestCache.get(p.name)
     return c === undefined || now - c.fetchedAt > LATEST_CACHE_TTL_MS
   })
-  // 单包失败不拖垮整批：其余照常返回，失败的下轮再查
+  // 单包失败不拖垮整批：其余照常返回，失败的下轮再查。
+  // TTL 刷新后 latest 版本没变时保留已查到的发布时间（同版本的时间不可变）。
   await Promise.allSettled(
     stale.map(async (p) => {
       const latest = await fetchLatestVersion(p.name, registry)
-      latestCache.set(p.name, { latest, fetchedAt: Date.now() })
+      const prev = latestCache.get(p.name)
+      latestCache.set(p.name, {
+        latest,
+        fetchedAt: Date.now(),
+        publishedAt: prev !== undefined && prev.latest === latest ? prev.publishedAt : undefined,
+      })
     }),
   )
-  const updates: Record<string, { latest: string; update: boolean }> = {}
+  const updates: Record<string, { latest: string; update: boolean; publishedAt?: string | null }> = {}
+  const needTime: string[] = []
   for (const p of npmPlugins) {
     const c = latestCache.get(p.name)
     if (c === undefined) continue
-    updates[p.name] = { latest: c.latest, update: compareSemver(c.latest, p.version) > 0 }
+    const hasUpdate = compareSemver(c.latest, p.version) > 0
+    updates[p.name] = { latest: c.latest, update: hasUpdate }
+    if (hasUpdate) {
+      if (c.publishedAt === undefined) needTime.push(p.name)
+      else updates[p.name].publishedAt = c.publishedAt
+    }
   }
+  // 惰性补查发布时间：只有确认有更新的包才拉一次完整 packument（体量比
+  // /latest 大一个量级，没必要为「已是最新」的包多传几十 KB）。
+  // 查询失败不写缓存：下一次 /updates 自愈重试。
+  await Promise.allSettled(
+    needTime.map(async (pkg) => {
+      const c = latestCache.get(pkg)
+      if (c === undefined) return
+      const at = await fetchPublishTime(pkg, c.latest, registry)
+      c.publishedAt = at
+      if (updates[pkg] !== undefined) updates[pkg].publishedAt = at
+    }),
+  )
   return updates
 }
 
@@ -848,6 +894,7 @@ export function apply(ctx: Context) {
         return sendJson(res, 400, { ok: false, error: '更新自身需要 selfConfirm: true（面板已自动携带）' })
       }
       const wasDisabled = current.disabled
+      const expectedLatest = latestCache.get(pkg)?.latest ?? null
       const result = await runDshPlugin(profile, ['add', `${pkg}@latest`])
       if (result.code !== 0) {
         return sendJson(res, 500, { ok: false, error: `dsh plugin add 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
@@ -861,8 +908,22 @@ export function apply(ctx: Context) {
         }
       } catch { /* 刷新失败不影响更新结果 */ }
       latestCache.delete(pkg)
-      logger.info(`updated ${pkg} to latest in profile ${profile}`)
-      sendJson(res, 200, { ok: true, name: pkg, output: result.output.slice(-500) })
+      // pnpm 的 minimumReleaseAge 供应链门禁会静默跳过「发布过新」的版本，
+      // 以 exit 0 + Already up to date 收场——exit 码不代表真装上了。
+      // 以磁盘实际版本对账，如实告诉前端。
+      let installed: string | null = null
+      try {
+        installed = listPlugins(ctx).plugins.find((p) => p.name === pkg)?.version ?? null
+      } catch { /* 读取失败按未知处理 */ }
+      const updated =
+        installed !== null && installed !== '-' &&
+        (expectedLatest !== null ? installed === expectedLatest : installed !== current.version)
+      logger.info(`updated ${pkg} to ${installed ?? '?'} in profile ${profile}`)
+      sendJson(res, 200, {
+        ok: true, name: pkg, version: installed,
+        expected: expectedLatest, updated,
+        output: result.output.slice(-500),
+      })
     },
   })
 
