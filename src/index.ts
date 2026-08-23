@@ -488,6 +488,7 @@ function listPlugins(ctx: Context): { profile: string; plugins: PluginRow[] } {
 }
 
 export function apply(ctx: Context) {
+  const logger = ctx.logger(name)
   ctx.webServer.register({
     kind: 'exact',
     path: '/api/plugin-manager/list',
@@ -534,7 +535,7 @@ export function apply(ctx: Context) {
         ? await disableRows(patchPath, current.rows)
         : await enableRows(patchPath, current.rows)
       if (!result.ok) return sendJson(res, 500, { ok: false, error: result.reason })
-      console.log(`[dsh-plugin-mgr] ${disable ? 'disabled' : 'enabled'} ${pkg} in profile ${profile} (patch layer, HMR applies in ~1s)`)
+      logger.info(`${disable ? 'disabled' : 'enabled'} ${pkg} in profile ${profile} (patch layer, HMR applies in ~1s)`)
       sendJson(res, 200, { ok: true, name: pkg, disabled: disable })
     },
   })
@@ -575,12 +576,12 @@ export function apply(ctx: Context) {
         return sendJson(res, 500, { ok: false, error: `dsh plugin remove 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
       }
       await removeRowBlocks(patchPath, current.rows)
-      console.log(`[dsh-plugin-mgr] uninstalled ${pkg} from profile ${profile}`)
+      logger.info(`uninstalled ${pkg} from profile ${profile}`)
       sendJson(res, 200, { ok: true, name: pkg, output: result.output.slice(-500) })
     },
   })
 
-  console.log(
-    `[dsh-plugin-mgr] ready — routes GET /api/plugin-manager/list, POST /api/plugin-manager/toggle, POST /api/plugin-manager/uninstall`,
+  logger.info(
+    `ready — routes GET /api/plugin-manager/list, POST /api/plugin-manager/toggle, POST /api/plugin-manager/uninstall`,
   )
 }
