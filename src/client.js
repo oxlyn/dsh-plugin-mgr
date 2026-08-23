@@ -161,7 +161,10 @@ window.__ModuleLoader__.load({
 
         // ── 样式表（一次性注入；类名 dshpm- 前缀隔离）────────────────────────
         const CSS = `
-.dshpm-root { display:flex; flex-direction:column; gap:12px; color:var(--dsw-alias-label-primary,#333); }
+/* 宿主 tab 标题栏固定 */
+[role="tablist"] { position:sticky; top:0; z-index:20; background:var(--dsw-alias-bg-layer-1,#f5f5f5); padding-top:8px; margin-top:-8px; }
+.dshpm-root { color:var(--dsw-alias-label-primary,#333); }
+.dshpm-sticky { position:sticky; top:44px; z-index:10; background:var(--dsw-alias-bg-layer-1,#f5f5f5); padding-bottom:8px; }
 .dshpm-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .dshpm-meta { font-size:13px; color:var(--dsw-alias-label-tertiary,#888); margin-right:auto; }
 .dshpm-seg { display:inline-flex; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; overflow:hidden; }
@@ -235,6 +238,16 @@ window.__ModuleLoader__.load({
 .dshpm-banner { font-size:12px; line-height:1.6; padding:8px 12px; border-radius:8px; word-break:break-all; }
 .dshpm-banner-ok { background:var(--dsw-alias-state-success-bg,#e6f4ea); color:var(--dsw-alias-state-success-primary,#1e8e3e); }
 .dshpm-banner-err { background:var(--dsw-alias-state-error-bg,#fce8e6); color:var(--dsw-alias-state-error-primary,#d32f2f); white-space:pre-wrap; }
+/* Toast 通知容器：固定在视口正中央，不随页面滚动 */
+.dshpm-toast-container { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:10000; display:flex; flex-direction:column-reverse; gap:8px; pointer-events:none; align-items:center; }
+.dshpm-toast { pointer-events:auto; font-size:13px; line-height:1.5; padding:10px 16px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.15); word-break:break-all; max-width:360px; animation:dshpm-toast-in .3s ease-out; transition:opacity .3s,transform .3s; }
+.dshpm-toast.is-leaving { opacity:0; transform:translateY(10px); }
+.dshpm-toast-ok { background:var(--dsw-alias-state-success-bg,#e6f4ea); color:var(--dsw-alias-state-success-primary,#1e8e3e); border:1px solid var(--dsw-alias-state-success-primary,#1e8e3e); }
+.dshpm-toast-err { background:var(--dsw-alias-state-error-bg,#fce8e6); color:var(--dsw-alias-state-error-primary,#d32f2f); border:1px solid var(--dsw-alias-state-error-primary,#d32f2f); white-space:pre-wrap; display:flex; align-items:flex-start; gap:12px; }
+.dshpm-toast-close { flex:none; width:18px; height:18px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:.6; transition:opacity .16s; border:none; background:transparent; padding:0; color:inherit; }
+.dshpm-toast-close:hover { opacity:1; }
+.dshpm-toast-close svg { width:14px; height:14px; display:block; }
+@keyframes dshpm-toast-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 .dshpm-empty { padding:40px 16px; text-align:center; color:var(--dsw-alias-label-tertiary,#999); border:1px dashed var(--dsw-alias-border-l2,#e2e2e2); border-radius:12px; font-size:13px; }
 .dshpm-loading { padding:32px 0; text-align:center; color:var(--dsw-alias-label-tertiary,#999); font-size:13px; }
 .dshpm-hint { font-size:12px; color:var(--dsw-alias-label-tertiary,#888); }
@@ -265,7 +278,9 @@ window.__ModuleLoader__.load({
             const [state, setState] = useState({ loading: true, error: null, data: null });
             // 单行操作进行中：{ [name]: 'toggle' | 'uninstall' }
             const [pending, setPending] = useState({});
-            const [message, setMessage] = useState(null); // { type: 'ok'|'error', text }
+            // Toast 通知队列：{ id, type, text, leaving }
+            const [toasts, setToasts] = useState([]);
+            const toastIdRef = React.useRef(0);
             // 手动刷新反馈：记录刷新完成时间，短暂显示"已刷新"横幅
             const [refreshedAt, setRefreshedAt] = useState(null);
             // 展开状态：{ [name]: boolean }
@@ -291,6 +306,29 @@ window.__ModuleLoader__.load({
 
             useEffect(() => {
                 ensureCss();
+            }, []);
+
+            // 添加 toast 通知；成功自动 4s 消失，失败需手动关闭
+            const addToast = useCallback((type, text) => {
+                const id = ++toastIdRef.current;
+                setToasts((prev) => [...prev, { id, type, text, leaving: false }]);
+                // 成功通知自动消失
+                if (type === "ok") {
+                    setTimeout(() => {
+                        setToasts((prev) => prev.map((t) => t.id === id ? { ...t, leaving: true } : t));
+                    }, 3500);
+                    setTimeout(() => {
+                        setToasts((prev) => prev.filter((t) => t.id !== id));
+                    }, 4000);
+                }
+            }, []);
+
+            // 手动关闭 toast
+            const dismissToast = useCallback((id) => {
+                setToasts((prev) => prev.map((t) => t.id === id ? { ...t, leaving: true } : t));
+                setTimeout(() => {
+                    setToasts((prev) => prev.filter((t) => t.id !== id));
+                }, 300);
             }, []);
 
             useEffect(() => {
@@ -375,34 +413,29 @@ window.__ModuleLoader__.load({
             const toggle = async (row) => {
                 const disable = !row.disabled; // 当前启用 → 停止；当前停止 → 启动
                 setPending((s) => ({ ...s, [row.name]: "toggle" }));
-                setMessage(null);
                 try {
                     await post("/api/plugin-manager/toggle", { name: row.name, disable });
-                    setMessage({
-                        type: "ok",
-                        text: fmt(disable ? t("disabledMsg") : t("enabledMsg"), row.name),
-                    });
+                    addToast("ok", fmt(disable ? t("disabledMsg") : t("enabledMsg"), row.name));
                     // HMR 重新组合约需 1s，稍等后刷新状态
                     setTimeout(() => {
                         clearPending(row.name);
                         loadData();
                     }, 1300);
                 } catch (e) {
-                    setMessage({ type: "error", text: fmt(t("toggleFail"), row.name, e.message) });
+                    addToast("error", fmt(t("toggleFail"), row.name, e.message));
                     clearPending(row.name);
                 }
             };
 
             const uninstall = async (row) => {
                 setPending((s) => ({ ...s, [row.name]: "uninstall" }));
-                setMessage(null);
                 try {
                     await post("/api/plugin-manager/uninstall", { name: row.name, selfConfirm: true });
-                    setMessage({ type: "ok", text: fmt(t("uninstalledMsg"), row.name) });
+                    addToast("ok", fmt(t("uninstalledMsg"), row.name));
                     setExpanded((s) => ({ ...s, [row.name]: false }));
                     loadData();
                 } catch (e) {
-                    setMessage({ type: "error", text: fmt(t("uninstallFail"), row.name, e.message) });
+                    addToast("error", fmt(t("uninstallFail"), row.name, e.message));
                 } finally {
                     clearPending(row.name);
                 }
@@ -412,19 +445,18 @@ window.__ModuleLoader__.load({
                 const info = updates[row.name];
                 const latest = (info && info.latest) || "";
                 setPending((s) => ({ ...s, [row.name]: "update" }));
-                setMessage(null);
                 try {
                     const json = await post("/api/plugin-manager/update", { name: row.name, selfConfirm: true });
                     // updated=false：pnpm 供应链策略静默跳过（exit 0 但版本没变），如实提示
                     if (json.updated === false) {
-                        setMessage({ type: "error", text: fmt(t("updateSkipped"), row.name, json.version || row.version) });
+                        addToast("error", fmt(t("updateSkipped"), row.name, json.version || row.version));
                     } else {
-                        setMessage({ type: "ok", text: fmt(t("updatedMsg"), row.name, json.version || latest) });
+                        addToast("ok", fmt(t("updatedMsg"), row.name, json.version || latest));
                     }
                     await loadData(true);
                     fetchUpdates();
                 } catch (e) {
-                    setMessage({ type: "error", text: fmt(t("updateFail"), row.name, e.message) });
+                    addToast("error", fmt(t("updateFail"), row.name, e.message));
                 } finally {
                     clearPending(row.name);
                 }
@@ -491,7 +523,8 @@ window.__ModuleLoader__.load({
             });
 
             return h("div", { className: `dshpm-root${columns === 2 ? " is-cols-2" : ""}` },
-                h("div", { className: "dshpm-toolbar" },
+                h("div", { className: "dshpm-sticky" },
+                    h("div", { className: "dshpm-toolbar" },
                     h("span", { className: "dshpm-meta" },
                         hasFilter
                             ? fmt(t("metaFiltered"), data.profile, visible.length, plugins.length)
@@ -540,18 +573,16 @@ window.__ModuleLoader__.load({
                         disabled: state.loading && !!state.data,
                         onClick: () => loadData(false),
                     }, state.loading && state.data ? t("refreshing") : t("refresh"))
+                    ),
+                    state.error && state.data && h("div", {
+                        className: "dshpm-banner dshpm-banner-err",
+                    }, t("loadError"), state.error),
+                    refreshedAt !== null && h("div", {
+                        className: "dshpm-banner dshpm-banner-ok",
+                        "aria-live": "polite",
+                    }, fmt(t("refreshedAt"), refreshedAt.toLocaleTimeString()))
                 ),
-                message && h("div", {
-                    className: `dshpm-banner ${message.type === "error" ? "dshpm-banner-err" : "dshpm-banner-ok"}`,
-                }, message.text),
-                state.error && state.data && h("div", {
-                    className: "dshpm-banner dshpm-banner-err",
-                }, t("loadError"), state.error),
-                refreshedAt !== null && h("div", {
-                    className: "dshpm-banner dshpm-banner-ok",
-                    "aria-live": "polite",
-                }, fmt(t("refreshedAt"), refreshedAt.toLocaleTimeString())),
-                    plugins.length === 0
+                plugins.length === 0
                         ? h("div", { className: "dshpm-empty" }, t("empty"))
                         // 有插件但被搜索滤空：提示 + 一键清除
                         : visible.length === 0
@@ -773,7 +804,36 @@ window.__ModuleLoader__.load({
                             marginBottom: "0",
                         },
                     }, confirming.kind === "update" ? t("confirmUpdateSelf") : t("confirmSelf")) : null
-                ) : null
+                ) : null,
+                // Toast 通知容器：固定在视口正中央
+                toasts.length > 0 && h("div", { className: "dshpm-toast-container", "aria-live": "polite" },
+                    toasts.map((toast) =>
+                        h("div", {
+                            key: toast.id,
+                            className: `dshpm-toast ${toast.type === "error" ? "dshpm-toast-err" : "dshpm-toast-ok"}${toast.leaving ? " is-leaving" : ""}`,
+                            role: "alert",
+                        },
+                            h("span", null, toast.text),
+                            // 错误通知显示关闭按钮
+                            toast.type === "error" && h("button", {
+                                className: "dshpm-toast-close",
+                                "aria-label": "关闭",
+                                onClick: () => dismissToast(toast.id),
+                            },
+                                h("svg", {
+                                    viewBox: "0 0 24 24",
+                                    fill: "none",
+                                    stroke: "currentColor",
+                                    strokeWidth: 2,
+                                    strokeLinecap: "round",
+                                    strokeLinejoin: "round",
+                                },
+                                    h("path", { d: "M18 6L6 18M6 6l12 12" })
+                                )
+                            )
+                        )
+                    )
+                )
             );
         }
 

@@ -74,8 +74,13 @@ function dshHome(): string {
  * 用户补丁层路径 + profile 名。
  * 优先用 loader 的 cordis:include entry 实际读取的路径（宿主自有 profile 目录时
  * 也正确）；回退到惯例位置 $DSH_HOME/profiles/<DSH_PROFILE|web>/cordis.patch.yml。
+ *
+ * 当 loader 中有多个 cordis:include entry 时，优先匹配 DSH_PROFILE 对应的那个，
+ * 避免在多 profile 环境下选错目录。
  */
 function locateProfile(ctx: Context): { patchPath: string; profile: string } {
+  const targetProfile = process.env.DSH_PROFILE || 'web'
+  let fallback: { patchPath: string; profile: string } | null = null
   for (const entry of ctx.loader.entries()) {
     const opts = entry.options
     if (opts?.name !== 'cordis:include' || typeof opts.config?.path !== 'string') continue
@@ -89,10 +94,12 @@ function locateProfile(ctx: Context): { patchPath: string; profile: string } {
       }
     }
     const patchPath = includePath.replace(/cordis\.yml$/u, 'cordis.patch.yml')
-    return { patchPath, profile: basename(dirname(patchPath)) }
+    const profile = basename(dirname(patchPath))
+    if (profile === targetProfile) return { patchPath, profile }
+    fallback ??= { patchPath, profile }
   }
-  const profile = process.env.DSH_PROFILE || 'web'
-  return { patchPath: join(dshHome(), 'profiles', profile, 'cordis.patch.yml'), profile }
+  if (fallback) return fallback
+  return { patchPath: join(dshHome(), 'profiles', targetProfile, 'cordis.patch.yml'), profile: targetProfile }
 }
 
 // ── 已安装列表 ─────────────────────────────────────────────────────────────
@@ -364,7 +371,7 @@ function dshArgv(): { file: string; args: string[] } {
   return { file: 'dsh', args: [] }
 }
 
-const UNINSTALL_TIMEOUT_MS = 15 * 60 * 1000
+const UNINSTALL_TIMEOUT_MS = 3 * 60 * 1000
 
 async function runDshPlugin(profile: string, verbArgs: string[]): Promise<{ code: number | null; output: string }> {
   const { file, args } = dshArgv()
@@ -715,8 +722,13 @@ function listPlugins(ctx: Context): { profile: string; plugins: PluginRow[] } {
   const profileDir = dirname(patchPath)
   const state = readUserPatchState(patchPath)
 
-  const manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as {
-    dependencies?: Record<string, string>
+  let manifest: { dependencies?: Record<string, string> }
+  try {
+    manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
+  } catch {
+    throw new Error(`profile 的 package.json 不存在或无法解析：${join(profileDir, 'package.json')}`)
   }
   const plugins: PluginRow[] = []
   for (const [dep, spec] of Object.entries(manifest.dependencies ?? {})) {
@@ -819,8 +831,8 @@ export function apply(ctx: Context) {
         return sendJson(res, 400, { ok: false, error: (e as Error).message })
       }
       const pkg = body.name
-      if (typeof pkg !== 'string' || pkg === '') {
-        return sendJson(res, 400, { ok: false, error: '参数错误：需要 { name: string }' })
+      if (typeof pkg !== 'string' || pkg === '' || pkg.includes('..') || pkg.includes('\0') || !/^[@a-z0-9_.@\/-]+$/i.test(pkg)) {
+        return sendJson(res, 400, { ok: false, error: '参数错误：包名格式非法' })
       }
       let patchPath: string
       let profile: string
@@ -873,8 +885,8 @@ export function apply(ctx: Context) {
         return sendJson(res, 400, { ok: false, error: (e as Error).message })
       }
       const pkg = body.name
-      if (typeof pkg !== 'string' || pkg === '') {
-        return sendJson(res, 400, { ok: false, error: '参数错误：需要 { name: string }' })
+      if (typeof pkg !== 'string' || pkg === '' || pkg.includes('..') || pkg.includes('\0') || !/^[@a-z0-9_.@\/-]+$/i.test(pkg)) {
+        return sendJson(res, 400, { ok: false, error: '参数错误：包名格式非法' })
       }
       let patchPath: string
       let profile: string
