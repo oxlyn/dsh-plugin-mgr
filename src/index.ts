@@ -507,8 +507,15 @@ export function apply(ctx: Context) {
       if (typeof pkg !== 'string' || typeof disable !== 'boolean') {
         return sendJson(res, 400, { ok: false, error: '参数错误：需要 { name: string, disable: boolean }' })
       }
-      const { patchPath, profile } = locateProfile(ctx)
-      const current = listPlugins(ctx).plugins.find((p) => p.name === pkg)
+      let patchPath: string
+      let profile: string
+      let current: PluginRow | undefined
+      try {
+        ;({ patchPath, profile } = locateProfile(ctx))
+        current = listPlugins(ctx).plugins.find((p) => p.name === pkg)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: `读取已安装插件失败：${(e as Error).message}` })
+      }
       if (current === undefined) return sendJson(res, 404, { ok: false, error: `未找到插件 ${pkg}` })
       if (current.protected) return sendJson(res, 400, { ok: false, error: `${pkg} 是宿主基础设施，不允许启停` })
       if (current.self) return sendJson(res, 400, { ok: false, error: '不能停用插件管理器自身（停用后无人再把它启用）' })
@@ -538,8 +545,15 @@ export function apply(ctx: Context) {
       if (typeof pkg !== 'string' || pkg === '') {
         return sendJson(res, 400, { ok: false, error: '参数错误：需要 { name: string }' })
       }
-      const { patchPath, profile } = locateProfile(ctx)
-      const current = listPlugins(ctx).plugins.find((p) => p.name === pkg)
+      let patchPath: string
+      let profile: string
+      let current: PluginRow | undefined
+      try {
+        ;({ patchPath, profile } = locateProfile(ctx))
+        current = listPlugins(ctx).plugins.find((p) => p.name === pkg)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: `读取已安装插件失败：${(e as Error).message}` })
+      }
       if (current === undefined) return sendJson(res, 404, { ok: false, error: `未找到插件 ${pkg}` })
       if (current.protected) return sendJson(res, 400, { ok: false, error: `${pkg} 是宿主基础设施，不允许卸载` })
       if (current.self && !body.selfConfirm) {
