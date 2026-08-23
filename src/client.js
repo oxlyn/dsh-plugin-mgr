@@ -62,6 +62,7 @@ window.__ModuleLoader__.load({
             uninstalledMsg: "{0} 已卸载",
             uninstallFail: "{0} 卸载失败：{1}",
             confirmUninstall: "确定卸载 {0}@{1}？",
+            confirmUninstallNoVer: "确定卸载 {0}？",
             confirmSelf: "注意：这是插件管理器自己，卸载后本页面将消失。",
         };
         const en = {
@@ -104,6 +105,7 @@ window.__ModuleLoader__.load({
             uninstalledMsg: "{0} uninstalled",
             uninstallFail: "Failed to uninstall {0}: {1}",
             confirmUninstall: "Uninstall {0}@{1}?",
+            confirmUninstallNoVer: "Uninstall {0}?",
             confirmSelf: "Note: this is the plugin manager itself; this page will disappear after uninstalling.",
         };
 
@@ -304,8 +306,12 @@ window.__ModuleLoader__.load({
             };
 
             const uninstall = async (row) => {
-                const self = row.self ? "\n\n" + t("confirmSelf") : "";
-                if (!window.confirm(fmt(t("confirmUninstall"), row.name, row.version) + self)) return;
+            const self = row.self ? "\n\n" + t("confirmSelf") : "";
+            // 版本未知（'-'，如 link 断链）时确认文案不显示 @-
+            const confirmMsg = row.version !== "-"
+                ? fmt(t("confirmUninstall"), row.name, row.version)
+                : fmt(t("confirmUninstallNoVer"), row.name);
+            if (!window.confirm(confirmMsg + self)) return;
                 setPending((s) => ({ ...s, [row.name]: "uninstall" }));
                 setMessage(null);
                 try {
@@ -479,7 +485,9 @@ window.__ModuleLoader__.load({
                                 open ? h("div", { className: "dshpm-detail" },
                                     h("div", { className: "dshpm-field" },
                                         h("span", { className: "dshpm-field-key" }, t("version")),
-                                        h("span", { className: "dshpm-field-val" }, `v${row.version}`)
+                                        h("span", { className: "dshpm-field-val" },
+                                            row.version === "-" ? row.version : `v${row.version}`
+                                        )
                                     ),
                                     h("div", { className: "dshpm-field" },
                                         h("span", { className: "dshpm-field-key" }, t("source")),
