@@ -244,7 +244,8 @@ window.__ModuleLoader__.load({
                     setState({ loading: false, error: null, data: json });
                     if (!silent) setRefreshedAt(new Date());
                 } catch (e) {
-                    setState({ loading: false, error: e.message, data: null });
+                    // 保留已有列表：刷新失败只在列表上方横幅提示，不整页退化为错误屏
+                    setState((s) => ({ ...s, loading: false, error: e.message }));
                 }
             }, []);
 
@@ -326,7 +327,8 @@ window.__ModuleLoader__.load({
                     h("div", { className: "dshpm-loading" }, t("loading"))
                 );
             }
-            if (state.error) {
+            // 全屏错误仅在从无到有加载失败时出现；已有数据时失败走横幅
+            if (state.error && !state.data) {
                 return h("div", { className: "dshpm-root" },
                     h("div", { className: "dshpm-banner dshpm-banner-err" },
                         t("loadError"), state.error
@@ -382,6 +384,9 @@ window.__ModuleLoader__.load({
                 message && h("div", {
                     className: `dshpm-banner ${message.type === "error" ? "dshpm-banner-err" : "dshpm-banner-ok"}`,
                 }, message.text),
+                state.error && state.data && h("div", {
+                    className: "dshpm-banner dshpm-banner-err",
+                }, t("loadError"), state.error),
                 refreshedAt !== null && h("div", {
                     className: "dshpm-banner dshpm-banner-ok",
                     "aria-live": "polite",
