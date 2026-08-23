@@ -439,6 +439,8 @@ function cleanRepoUrl(repo: unknown): string | null {
 function sourceTypeOf(spec: string): 'local' | 'github' | 'npm' {
   if (spec.startsWith('link:') || spec.startsWith('file:')) return 'local'
   if (/github\.com|(^|:)github:|^git\+/u.test(spec)) return 'github'
+  // npm 的 user/repo 短写法（非 @scope、非 ./ 相对路径）也指向 GitHub
+  if (/^[A-Za-z0-9][\w.-]*\/[\w.-]+(?:#.*)?$/u.test(spec)) return 'github'
   return 'npm'
 }
 
