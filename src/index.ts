@@ -423,7 +423,7 @@ function cleanRepoUrl(repo: unknown): string | null {
   }
   if (url === null || url === '') return null
   let u = url.replace(/^git\+/u, '')
-  if (u.startsWith('github:')) u = `https://${u.replace(':', '/')}`
+  if (u.startsWith('github:')) u = u.replace(/^github:/u, 'https://github.com/')
   u = u.replace(/\.git$/u, '')
   if (/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+/u.test(u)) {
     return u.replace(/^https:\/\//u, '').replace(/\/$/u, '')
