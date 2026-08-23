@@ -138,10 +138,10 @@ function readUserPatchState(patchPath: string): PatchState {
   return { disables, forced }
 }
 
-/** 补丁层是合法的顶层数组才允许追加（坏了的文件不越改越坏）。 */
-function isValidEntryList(patchPath: string): boolean {
+/** 补丁文本是合法的顶层数组才允许追加（坏了的文件不越改越坏）。 */
+function isValidEntryText(text: string): boolean {
   try {
-    return Array.isArray(parseYaml(readFileSync(patchPath, 'utf8')) as unknown)
+    return Array.isArray(parseYaml(text) as unknown)
   } catch {
     return false
   }
@@ -151,10 +151,26 @@ function rowBlock(rowId: string, disabled: boolean): string {
   return `- id: ${rowId}\n  disabled: ${disabled ? 'true' : 'false'}\n`
 }
 
+const PATCH_CORRUPT_REASON = '补丁层不是合法的条目数组，已拒绝写入；请先修正 cordis.patch.yml'
+
 /**
- * 追加一条顶层补丁。模板自带的空 `[]` 占位会被注释掉再追加
- * （同一文档出现两个顶层元素是非法 YAML）。
+ * 归一化已有补丁文本以便追加：补全末尾换行；模板自带的空 `[]` 占位会被
+ * 注释掉（同一文档出现两个顶层元素是非法 YAML）。文件损坏时返回 null。
  */
+function prepareAppend(text: string): string | null {
+  const withoutComments = text.replace(/^[ \t]*#.*$/gmu, '').trim()
+  if (withoutComments === '') {
+    return text === '' || text.endsWith('\n') ? text : `${text}\n`
+  }
+  if (withoutComments === '[]' || withoutComments === '[ ]') {
+    const commented = text.replace(/^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
+    return commented.endsWith('\n') ? commented : `${commented}\n`
+  }
+  if (!isValidEntryText(text)) return null
+  return text.endsWith('\n') ? text : `${text}\n`
+}
+
+/** 追加一条顶层补丁。 */
 function appendPatchEntry(patchPath: string, block: string): { ok: boolean; reason: string | null } {
   let text = ''
   try {
@@ -163,23 +179,9 @@ function appendPatchEntry(patchPath: string, block: string): { ok: boolean; reas
     writeFileSync(patchPath, block)
     return { ok: true, reason: null }
   }
-  const withoutComments = text.replace(/^[ \t]*#.*$/gmu, '').trim()
-  if (withoutComments === '') {
-    const next = text.endsWith('\n') ? text : `${text}\n`
-    writeFileSync(patchPath, `${next}${block}`)
-    return { ok: true, reason: null }
-  }
-  if (withoutComments === '[]' || withoutComments === '[ ]') {
-    const commented = text.replace(/^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
-    const next = commented.endsWith('\n') ? commented : `${commented}\n`
-    writeFileSync(patchPath, `${next}${block}`)
-    return { ok: true, reason: null }
-  }
-  if (!isValidEntryList(patchPath)) {
-    return { ok: false, reason: '补丁层不是合法的条目数组，已拒绝写入；请先修正 cordis.patch.yml' }
-  }
-  const next = text.endsWith('\n') ? text : `${text}\n`
-  writeFileSync(patchPath, `${next}${block}`)
+  const base = prepareAppend(text)
+  if (base === null) return { ok: false, reason: PATCH_CORRUPT_REASON }
+  writeFileSync(patchPath, `${base}${block}`)
   return { ok: true, reason: null }
 }
 
@@ -218,25 +220,29 @@ async function disableRows(patchPath: string, rowIds: string[]): Promise<{ ok: b
 
 async function enableRows(patchPath: string, rowIds: string[]): Promise<{ ok: boolean; reason: string | null }> {
   return queuedWrite(async () => {
+    for (const id of rowIds) {
+      if (!ROW_ID_RE.test(id)) return { ok: false, reason: `行 id ${id} 含特殊字符，拒绝写入补丁层` }
+    }
     let text = ''
     try {
       text = readFileSync(patchPath, 'utf8')
     } catch { /* 无补丁文件：本来就启用 */ }
+    const forced = readUserPatchState(patchPath).forced
+    // 全程在内存拼出最终内容、结尾一次写回：边追加边落盘会被末尾的
+    // 整文件回写覆盖（追加的强制启用行凭空消失），多行混合场景同理。
+    let next = text
     for (const id of rowIds) {
-      if (!ROW_ID_RE.test(id)) return { ok: false, reason: `行 id ${id} 含特殊字符，拒绝写入补丁层` }
       const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: true\r?\n`, 'mu')
-      if (blockRe.test(text)) {
-        text = withPlaceholderRestored(text.replace(blockRe, ''))
-      } else {
-        const state = readUserPatchState(patchPath)
-        if (!state.forced.includes(id)) {
-          // 低层（bundle/模板）压住了它：用 disabled: false 强制启用
-          const r = appendPatchEntry(patchPath, rowBlock(id, false))
-          if (!r.ok) return r
-        }
+      if (blockRe.test(next)) {
+        next = withPlaceholderRestored(next.replace(blockRe, ''))
+      } else if (!forced.includes(id)) {
+        // 低层（bundle/模板）压住了它：用 disabled: false 强制启用
+        const base = next === '' ? '' : prepareAppend(next)
+        if (base === null) return { ok: false, reason: PATCH_CORRUPT_REASON }
+        next = `${base}${rowBlock(id, false)}`
       }
     }
-    if (text !== '') writeFileSync(patchPath, text)
+    if (next !== text) writeFileSync(patchPath, next)
     return { ok: true, reason: null }
   })
 }
