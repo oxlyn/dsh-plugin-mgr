@@ -129,7 +129,8 @@ function readUserPatchState(patchPath: string): PatchState {
   }
   const lines = text.split(/\r?\n/u)
   for (let i = 0; i < lines.length; i++) {
-    const m = /^- id: ([A-Za-z0-9_.-]+)\s*$/u.exec(lines[i] ?? '')
+    // 行 id 允许可选引号，与 enableRows/removeRowBlocks 的块删除正则同口径
+    const m = /^- id: ['"]?([A-Za-z0-9_.-]+)['"]?\s*$/u.exec(lines[i] ?? '')
     if (m === null) continue
     const next = lines[i + 1] ?? ''
     if (/^ {2}disabled: true\s*$/u.test(next)) disables.push(m[1] ?? '')
