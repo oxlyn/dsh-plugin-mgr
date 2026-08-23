@@ -19,6 +19,9 @@ const {
   removeRowBlocks,
   cleanRepoUrl,
   sourceTypeOf,
+  parseNpmrcRegistry,
+  compareSemver,
+  failureText,
 } = _internal
 
 /** 建临时补丁文件；initial 为 undefined 表示不创建文件。 */
@@ -201,4 +204,45 @@ test('sourceTypeOf: spec 分类', () => {
   assert.equal(sourceTypeOf('https://github.com/user/repo.git'), 'github')
   assert.equal(sourceTypeOf('user/repo'), 'github')
   assert.equal(sourceTypeOf('user/repo#v1.2.0'), 'github')
+})
+
+// ── parseNpmrcRegistry ─────────────────────────────────────────────────────
+
+test('parseNpmrcRegistry: 解析 registry 行，跳过注释与其他配置', () => {
+  assert.equal(parseNpmrcRegistry('# comment\nregistry=https://registry.npmmirror.com\n'), 'https://registry.npmmirror.com')
+  assert.equal(parseNpmrcRegistry('; ini-style comment\nregistry = https://example.com/npm/\n'), 'https://example.com/npm/')
+  assert.equal(parseNpmrcRegistry('registry="https://quoted.com"\n'), 'https://quoted.com')
+  assert.equal(parseNpmrcRegistry('prefix=~/.npm-global\n'), null)
+  assert.equal(parseNpmrcRegistry(''), null)
+})
+
+// ── compareSemver ──────────────────────────────────────────────────────────
+
+test('compareSemver: core 三段数值比较', () => {
+  assert.equal(compareSemver('1.2.3', '1.2.3'), 0)
+  assert.equal(compareSemver('1.10.0', '1.9.9'), 1)
+  assert.equal(compareSemver('2.0.0', '10.0.0'), -1)
+  assert.equal(compareSemver('v1.2.3', '1.2.3'), 0)
+})
+
+test('compareSemver: 预发布低于正式版、标识符数值比较', () => {
+  assert.equal(compareSemver('1.2.3-beta.1', '1.2.3'), -1)
+  assert.equal(compareSemver('1.2.3', '1.2.3-beta.1'), 1)
+  assert.equal(compareSemver('1.2.3-beta.2', '1.2.3-beta.10'), -1)
+  assert.equal(compareSemver('1.2.3-beta', '1.2.3-beta.1'), -1)
+  assert.equal(compareSemver('1.2.3-rc.1', '1.2.3-beta.9'), 1)
+})
+
+test('compareSemver: 非语义化版本退化为字典序', () => {
+  assert.equal(compareSemver('abc', 'abc'), 0)
+  assert.equal(compareSemver('abc', 'abd'), -1)
+})
+
+// ── failureText ────────────────────────────────────────────────────────────
+
+test('failureText: Error 取 message，其余 String()', () => {
+  assert.equal(failureText(new Error('boom')), 'boom')
+  assert.equal(failureText('plain string'), 'plain string')
+  assert.equal(failureText(undefined), 'undefined')
+  assert.equal(failureText(null), 'null')
 })

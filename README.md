@@ -19,6 +19,9 @@
 | 2 | 启动 / 停止 | 通过 profile 用户补丁层（`cordis.patch.yml`）写入 `disabled: true/false`，HMR 约 1s 热生效，跨重启保留 |
 | 3 | 详情展开 | 点卡片展开：版本 / 安装来源（npm·GitHub·本地分类 + 版本范围 + 可点击的仓库地址）/ 插件介绍 |
 | 4 | 卸载 | 展开详情中的卸载按钮（二次确认），先清理启停行再执行 `dsh plugin --profile <name> remove <pkg>` |
+| 5 | 更新检查 + 一键更新 | npm 来源插件自动比对 registry 最新版（结果缓存 5min），有新版时卡片显示「可更新」徽标，详情里一键更新到 latest；更新不冲掉已有启停状态 |
+| 6 | 搜索 | 工具栏搜索框（匹配 名称/描述/spec，大小写不敏感）；过滤时计数显示「x / y」，滤空可一键清除 |
+| 7 | 运行错误展示 | 监听宿主 fiber 状态事件：插件加载失败时卡片显示红色「加载失败」、详情里看错误信息；恢复运行（HMR 修复/回滚重启）自动清除 |
 
 **特性一览：**
 
@@ -27,6 +30,8 @@
 - 刷新带明确反馈：按钮态变化 + 「列表已刷新 · 时间」横幅
 - 安全防护：宿主基础设施模块拒绝启停/卸载；插件管理器自身开关与卸载置灰（悬停提示"本插件"），host 侧 API 双重校验
 - 补丁层写入做了串行化（防并发交错）、空 `[]` 占位恢复（防 profile 无法启动）、非法 YAML 拒绝写入
+- 更新检查走 npm registry，registry 取用顺序：`DSH_PLUGIN_MGR_REGISTRY` 环境变量 > `npm_config_registry` > profile/.npmrc > ~/.npmrc > npmjs.org（识别 npmmirror 等镜像）；仅查 npm 源插件，宿主模块与自身保护同卸载口径
+- 运行错误捕获走 cordis `internal/status` 事件（`global: true` 绕过上下文过滤）：FAILED 按 `fiber.entry.options.name` 归因到包、`fiber.await()` 重抛的错误取消息，回 ACTIVE 清除——不依赖轮询，失败与恢复都是即时感知
 - POST 接口校验 `Content-Type: application/json`（CSRF 门卫）+ 64KB 请求体上限
 
 ## 实现方式 / How it works
@@ -37,8 +42,10 @@
 ┌─ host 侧  src/index.ts → dist/index.js ─────────────────────────┐
 │  ctx.webServer.register：                                          │
 │    GET  /api/plugin-manager/list     读取 profile 依赖+补丁层状态    │
+│    GET  /api/plugin-manager/updates  比对 npm registry 最新版本      │
 │    POST /api/plugin-manager/toggle   启停（写 cordis.patch.yml）    │
 │    POST /api/plugin-manager/uninstall spawn dsh plugin remove      │
+│    POST /api/plugin-manager/update   spawn dsh plugin add pkg@latest│
 │  profile 定位：loader 的 cordis:include entry 实际路径              │
 └──────────────────────────────────────────────────────────────────┘
                           │ fetch (JSON)
@@ -98,7 +105,7 @@ pnpm run build       # 构建 dist/
 
 ```
 dsh-plugin-mgr/
-├── src/index.ts          # host 侧：list/toggle/uninstall 三条路由 + 补丁层读写
+├── src/index.ts          # host 侧：list/updates/toggle/uninstall/update 五条路由 + 补丁层读写
 ├── src/client.js         # client 侧：插件管理 tab（卡片 UI + 中英词典）
 ├── cordis.patch.yml      # bundle 层声明（id/name 走包名解析）
 └── dist/                 # 构建产物（npm 发布包含在 files 字段中）

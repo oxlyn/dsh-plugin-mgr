@@ -58,6 +58,9 @@ export const _internal = {
   removeRowBlocks,
   cleanRepoUrl,
   sourceTypeOf,
+  parseNpmrcRegistry,
+  compareSemver,
+  failureText,
 }
 
 // ── profile 定位 ───────────────────────────────────────────────────────────
@@ -362,9 +365,9 @@ function dshArgv(): { file: string; args: string[] } {
 
 const UNINSTALL_TIMEOUT_MS = 15 * 60 * 1000
 
-async function runDshPluginRemove(profile: string, name: string): Promise<{ code: number | null; output: string }> {
+async function runDshPlugin(profile: string, verbArgs: string[]): Promise<{ code: number | null; output: string }> {
   const { file, args } = dshArgv()
-  const argv = [...args, 'plugin', '--profile', profile, 'remove', name]
+  const argv = [...args, 'plugin', '--profile', profile, ...verbArgs]
   return new Promise((resolve_) => {
     const child = spawn(file, argv, {
       cwd: undefined,
@@ -387,6 +390,206 @@ async function runDshPluginRemove(profile: string, name: string): Promise<{ code
       resolve_({ code, output: out.trim() })
     })
   })
+}
+
+// ── 运行失败捕获（fiber 状态事件）───────────────────────────────────────────
+
+/**
+ * FiberState（@deepseek-ai/cordis fiber.d.ts）：
+ * PENDING=0 LOADING=1 ACTIVE=2 FAILED=3 DISPOSED=4 UNLOADING=5。
+ * 本包不依赖 cordis 的枚举导出（const enum），按稳定数值判断。
+ */
+const FIBER_ACTIVE = 2
+const FIBER_FAILED = 3
+
+/** 归一化失败信息：Error 取 message，其余 String()。 */
+function failureText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+/** 运行失败记录：包名 → 失败信息（同一包只留最近一条；恢复运行即清除）。 */
+const runtimeFailures = new Map<string, { message: string; at: number }>()
+
+/**
+ * 监听 fiber 状态迁移做失败归因：
+ * - FAILED：按 fiber.entry.options.name 归到插件包（entry 由 loader 挂到
+ *   fiber 上，子 fiber 经原型链继承同一 entry，同样算该包内部的故障）。
+ *   fiber.await() 会重抛启动错误，吞掉 rejection 只取消息。
+ * - 回到 ACTIVE：视为已恢复（HMR 修复 / 配置回滚后重启成功），清除记录。
+ * 注意必须 global: true —— internal 事件按上下文过滤派发，不绕过收不到
+ * 兄弟插件的状态。
+ */
+function watchFiberFailures(ctx: Context): void {
+  ctx.on('internal/status', (fiber: StatusFiber) => {
+    const pkg = fiber.entry?.options?.name
+    if (typeof pkg !== 'string' || pkg === '') return
+    if (fiber.state === FIBER_FAILED) {
+      fiber.await().catch((e: unknown) => {
+        runtimeFailures.set(pkg, { message: failureText(e), at: Date.now() })
+      })
+    } else if (fiber.state === FIBER_ACTIVE) {
+      runtimeFailures.delete(pkg)
+    }
+  }, { global: true })
+}
+
+/** internal/status 监听里用到的 fiber 形状（entry 由 cordis-plugin-loader 增补，本包无其类型）。 */
+interface StatusFiber {
+  state: number
+  entry?: { options?: { name?: unknown } }
+  await(): Promise<unknown>
+}
+
+// ── 更新检查（npm registry）────────────────────────────────────────────────
+
+const DEFAULT_REGISTRY = 'https://registry.npmjs.org'
+const LATEST_CACHE_TTL_MS = 5 * 60 * 1000
+const LATEST_FETCH_TIMEOUT_MS = 8 * 1000
+
+/** 解析 .npmrc 文本中的 registry= 行（跳过注释、去引号）。 */
+function parseNpmrcRegistry(text: string): string | null {
+  for (const raw of text.split(/\r?\n/u)) {
+    const line = raw.trim()
+    if (line === '' || line.startsWith('#') || line.startsWith(';')) continue
+    const m = /^registry\s*=\s*(\S+)\s*$/u.exec(line)
+    if (m === null) continue
+    return (m[1] ?? '').replace(/^["']|["']$/gu, '')
+  }
+  return null
+}
+
+let cachedRegistry: string | null = null
+
+/**
+ * registry 取用顺序：DSH_PLUGIN_MGR_REGISTRY 环境变量 > npm_config_registry >
+ * profile/.npmrc > ~/.npmrc > npmjs.org。国内镜像（npmmirror 等）配在 .npmrc
+ * 即可被识别，与 dsh CLI 安装时的取包来源保持一致。
+ */
+function resolveRegistry(profileDir: string): string {
+  if (cachedRegistry !== null) return cachedRegistry
+  const candidates: (string | null | undefined)[] = [
+    process.env.DSH_PLUGIN_MGR_REGISTRY,
+    process.env.npm_config_registry,
+  ]
+  for (const npmrc of [join(profileDir, '.npmrc'), join(homedir(), '.npmrc')]) {
+    try {
+      candidates.push(parseNpmrcRegistry(readFileSync(npmrc, 'utf8')))
+    } catch { /* 无该文件 */ }
+  }
+  for (const c of candidates) {
+    if (typeof c === 'string' && c !== '') {
+      cachedRegistry = c
+      return c
+    }
+  }
+  cachedRegistry = DEFAULT_REGISTRY
+  return DEFAULT_REGISTRY
+}
+
+interface Semver {
+  major: number
+  minor: number
+  patch: number
+  pre: string[]
+}
+
+/** 宽松解析 `v?1.2.3[-pre.1]`；非语义化版本返回 null。 */
+function parseSemver(version: string): Semver | null {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?$/u.exec(version.trim())
+  if (m === null) return null
+  return {
+    major: Number(m[1]),
+    minor: Number(m[2]),
+    patch: Number(m[3]),
+    pre: m[4] === undefined ? [] : m[4].split('.'),
+  }
+}
+
+/**
+ * 语义化版本比较（-1 | 0 | 1）。任一侧无法解析时退化为字典序，
+ * 只用于「最新版是否不同」的兜底判断。
+ */
+function compareSemver(a: string, b: string): number {
+  const pa = parseSemver(a)
+  const pb = parseSemver(b)
+  if (pa === null || pb === null) return a === b ? 0 : a < b ? -1 : 1
+  for (const key of ['major', 'minor', 'patch'] as const) {
+    if (pa[key] !== pb[key]) return pa[key] < pb[key] ? -1 : 1
+  }
+  // 同 core：无预发布 > 有预发布；预发布按标识符逐个比（数字标识符数值比较）
+  if (pa.pre.length === 0 && pb.pre.length === 0) return 0
+  if (pa.pre.length === 0) return 1
+  if (pb.pre.length === 0) return -1
+  const n = Math.max(pa.pre.length, pb.pre.length)
+  for (let i = 0; i < n; i++) {
+    const x = pa.pre[i]
+    const y = pb.pre[i]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    const xn = /^\d+$/u.test(x)
+    const yn = /^\d+$/u.test(y)
+    if (xn && yn) {
+      if (Number(x) !== Number(y)) return Number(x) < Number(y) ? -1 : 1
+    } else if (xn !== yn) {
+      return xn ? -1 : 1 // 数字标识符 < 字母数字标识符
+    } else if (x !== y) {
+      return x < y ? -1 : 1
+    }
+  }
+  return 0
+}
+
+interface LatestCacheEntry {
+  latest: string
+  fetchedAt: number
+}
+
+/** name → registry latest 版本（带 TTL，避免频繁刷列表打爆 registry）。 */
+const latestCache = new Map<string, LatestCacheEntry>()
+
+async function fetchLatestVersion(name: string, registry: string): Promise<string> {
+  const base = registry.replace(/\/+$/u, '')
+  const resp = await fetch(`${base}/${encodeURIComponent(name)}/latest`, {
+    headers: { Accept: 'application/vnd.npm.install-v1+json' },
+    signal: AbortSignal.timeout(LATEST_FETCH_TIMEOUT_MS),
+  })
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  const manifest = (await resp.json()) as { version?: unknown }
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new Error('registry 响应缺少 version')
+  }
+  return manifest.version
+}
+
+/**
+ * 拉取 npm 来源插件的可更新信息。只对 npm 源（semver spec）检查——
+ * github/local 源的「最新」不在 npm registry 上，无从比对。
+ */
+async function collectUpdates(ctx: Context): Promise<Record<string, { latest: string; update: boolean }>> {
+  const { patchPath } = locateProfile(ctx)
+  const registry = resolveRegistry(dirname(patchPath))
+  const npmPlugins = listPlugins(ctx).plugins.filter(
+    (p) => p.sourceType === 'npm' && !p.protected && p.version !== '-',
+  )
+  const now = Date.now()
+  const stale = npmPlugins.filter((p) => {
+    const c = latestCache.get(p.name)
+    return c === undefined || now - c.fetchedAt > LATEST_CACHE_TTL_MS
+  })
+  // 单包失败不拖垮整批：其余照常返回，失败的下轮再查
+  await Promise.allSettled(
+    stale.map(async (p) => {
+      const latest = await fetchLatestVersion(p.name, registry)
+      latestCache.set(p.name, { latest, fetchedAt: Date.now() })
+    }),
+  )
+  const updates: Record<string, { latest: string; update: boolean }> = {}
+  for (const p of npmPlugins) {
+    const c = latestCache.get(p.name)
+    if (c === undefined) continue
+    updates[p.name] = { latest: c.latest, update: compareSemver(c.latest, p.version) > 0 }
+  }
+  return updates
 }
 
 // ── HTTP helpers ───────────────────────────────────────────────────────────
@@ -431,6 +634,8 @@ interface PluginRow {
   protected: boolean
   rows: string[]
   self: boolean
+  /** 运行失败信息（fiber FAILED 捕获）；运行正常为 null */
+  error: string | null
 }
 
 /** 归一化 repository 字段为 github.com/user/repo 形式；不认识的返回 null。 */
@@ -496,6 +701,7 @@ function listPlugins(ctx: Context): { profile: string; plugins: PluginRow[] } {
       protected: PROTECTED_PATTERNS.some((re) => re.test(dep)),
       rows,
       self: dep === name,
+      error: runtimeFailures.get(dep)?.message ?? null,
     })
   }
   plugins.sort((a, b) => a.name.localeCompare(b.name))
@@ -504,6 +710,7 @@ function listPlugins(ctx: Context): { profile: string; plugins: PluginRow[] } {
 
 export function apply(ctx: Context) {
   const logger = ctx.logger(name)
+  watchFiberFailures(ctx)
   ctx.webServer.register({
     kind: 'exact',
     path: '/api/plugin-manager/list',
@@ -586,7 +793,7 @@ export function apply(ctx: Context) {
       // 先清理补丁层启停行，再让 dsh CLI 移除依赖与 bundle。
       // CLI 运行期间新到的 toggle 请求可能又写回启停行，成功后再清一次兜底。
       await removeRowBlocks(patchPath, current.rows)
-      const result = await runDshPluginRemove(profile, pkg)
+      const result = await runDshPlugin(profile, ['remove', pkg])
       if (result.code !== 0) {
         return sendJson(res, 500, { ok: false, error: `dsh plugin remove 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
       }
@@ -596,7 +803,71 @@ export function apply(ctx: Context) {
     },
   })
 
+  ctx.webServer.register({
+    kind: 'exact',
+    path: '/api/plugin-manager/updates',
+    handler: async (_req, res) => {
+      try {
+        const updates = await collectUpdates(ctx)
+        sendJson(res, 200, { ok: true, updates })
+      } catch (e) {
+        sendJson(res, 500, { ok: false, error: `检查插件更新失败：${(e as Error).message}` })
+      }
+    },
+  })
+
+  ctx.webServer.register({
+    kind: 'exact',
+    path: '/api/plugin-manager/update',
+    handler: async (req, res) => {
+      let body: Record<string, unknown>
+      try {
+        body = await readJsonBody(req)
+      } catch (e) {
+        return sendJson(res, 400, { ok: false, error: (e as Error).message })
+      }
+      const pkg = body.name
+      if (typeof pkg !== 'string' || pkg === '') {
+        return sendJson(res, 400, { ok: false, error: '参数错误：需要 { name: string }' })
+      }
+      let patchPath: string
+      let profile: string
+      let current: PluginRow | undefined
+      try {
+        ;({ patchPath, profile } = locateProfile(ctx))
+        current = listPlugins(ctx).plugins.find((p) => p.name === pkg)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: `读取已安装插件失败：${(e as Error).message}` })
+      }
+      if (current === undefined) return sendJson(res, 404, { ok: false, error: `未找到插件 ${pkg}` })
+      if (current.protected) return sendJson(res, 400, { ok: false, error: `${pkg} 是宿主基础设施，不允许更新` })
+      if (current.sourceType !== 'npm') {
+        return sendJson(res, 400, { ok: false, error: `${pkg} 不是 npm 来源，请通过原始安装来源更新` })
+      }
+      if (current.self && !body.selfConfirm) {
+        return sendJson(res, 400, { ok: false, error: '更新自身需要 selfConfirm: true（面板已自动携带）' })
+      }
+      const wasDisabled = current.disabled
+      const result = await runDshPlugin(profile, ['add', `${pkg}@latest`])
+      if (result.code !== 0) {
+        return sendJson(res, 500, { ok: false, error: `dsh plugin add 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
+      }
+      // add 重铺 bundle 补丁行后，若更新前是停用状态，重读行并重新断言停用，
+      // 避免更新把用户的启停选择冲掉。disableRows 幂等，已是停用则不动文件。
+      try {
+        const fresh = listPlugins(ctx).plugins.find((p) => p.name === pkg)
+        if (fresh !== undefined && wasDisabled && !fresh.disabled) {
+          await disableRows(patchPath, fresh.rows)
+        }
+      } catch { /* 刷新失败不影响更新结果 */ }
+      latestCache.delete(pkg)
+      logger.info(`updated ${pkg} to latest in profile ${profile}`)
+      sendJson(res, 200, { ok: true, name: pkg, output: result.output.slice(-500) })
+    },
+  })
+
   logger.info(
-    `ready — routes GET /api/plugin-manager/list, POST /api/plugin-manager/toggle, POST /api/plugin-manager/uninstall`,
+    `ready — routes GET /api/plugin-manager/list, GET /api/plugin-manager/updates, ` +
+      `POST /api/plugin-manager/toggle, POST /api/plugin-manager/uninstall, POST /api/plugin-manager/update`,
   )
 }

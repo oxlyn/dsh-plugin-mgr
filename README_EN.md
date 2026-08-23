@@ -19,6 +19,9 @@
 | 2 | Enable / disable | Writes `disabled: true/false` through the profile user patch layer (`cordis.patch.yml`); DSH HMR applies it in ~1s, survives restarts |
 | 3 | Expandable details | Click a card to expand: version / source (npm·GitHub·local classification + version range + clickable repository link) / description |
 | 4 | Uninstall | Uninstall button in the expanded details (with confirmation); cleans up patch rows first, then runs `dsh plugin --profile <name> remove <pkg>` |
+| 5 | Update check + one-click update | npm-sourced plugins are compared against the registry latest (results cached 5min); outdated cards show an "Update" badge and the details offer one-click update to latest; existing enable/disable state is preserved across updates |
+| 6 | Search | Toolbar search box (matches name/description/spec, case-insensitive); the count shows "x / y" while filtering, with a one-click clear when nothing matches |
+| 7 | Runtime error display | Listens to the host fiber status events: a plugin that failed to load gets a red "Load failed" state on its card with the error message in its details; recovery (HMR fix / rollback restart) clears it automatically |
 
 **Highlights:**
 
@@ -27,6 +30,8 @@
 - Refresh gives clear feedback: button state change + a "Refreshed · time" banner
 - Safety guards: host infrastructure modules refuse toggling/uninstalling; the manager's own switch and uninstall are grayed out (hover shows "This plugin"), double-checked host-side
 - Patch-layer writes are serialized (no interleaved read-modify-write), restore the empty `[]` placeholder (never brick the profile), and refuse malformed YAML
+- Update checks hit the npm registry, resolved as: `DSH_PLUGIN_MGR_REGISTRY` env > `npm_config_registry` > profile/.npmrc > ~/.npmrc > npmjs.org (mirror-aware, e.g. npmmirror); npm-sourced plugins only, host modules and self-guarding follow the same policy as uninstall
+- Runtime error capture rides the cordis `internal/status` event (`global: true` bypasses the context filter): FAILED fibers are attributed to their package via `fiber.entry.options.name`, the error message comes from `fiber.await()` rethrowing it, and returning to ACTIVE clears the record — no polling, failures and recoveries are both noticed instantly
 - POST endpoints require `Content-Type: application/json` (CSRF guard) with a 64KB body cap
 
 ## How it works
@@ -37,8 +42,10 @@ The plugin consists of a host side and a client side (declared via the `dsh.clie
 ┌─ host side   src/index.ts → dist/index.js ──────────────────────┐
 │  ctx.webServer.register:                                          │
 │    GET  /api/plugin-manager/list     reads profile deps + patch   │
+│    GET  /api/plugin-manager/updates  compares npm registry latest │
 │    POST /api/plugin-manager/toggle   enable/disable (patch layer) │
 │    POST /api/plugin-manager/uninstall spawns dsh plugin remove    │
+│    POST /api/plugin-manager/update   spawns dsh plugin add @latest│
 │  profile location: the loader's cordis:include entry path         │
 └──────────────────────────────────────────────────────────────────┘
                           │ fetch (JSON)
@@ -100,7 +107,7 @@ Project layout:
 
 ```
 dsh-plugin-mgr/
-├── src/index.ts          # host side: list/toggle/uninstall routes + patch-layer I/O
+├── src/index.ts          # host side: list/updates/toggle/uninstall/update routes + patch-layer I/O
 ├── src/client.js         # client side: manager tab (card UI + zh/en dictionaries)
 ├── cordis.patch.yml      # bundle layer declaration (id/name resolve as package names)
 └── dist/                 # build output (included in the published files field)

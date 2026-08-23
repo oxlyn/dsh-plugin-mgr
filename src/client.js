@@ -31,8 +31,15 @@ window.__ModuleLoader__.load({
             col1: "单列显示",
             col2: "双列显示",
             layoutGroup: "列表布局",
+            searchPlaceholder: "搜索名称 / 描述…",
+            searchAria: "搜索插件",
+            metaFiltered: "profile：{0} ｜ {1} / {2} 个插件",
+            emptyFiltered: "没有匹配的插件。",
+            clearFilters: "清除搜索",
             stateOn: "运行中",
             stateOff: "已停止",
+            stateError: "加载失败",
+            errorField: "错误信息",
             toggleOn: "点击停用（HMR 约 1s 生效）",
             toggleOff: "点击启用（HMR 约 1s 生效）",
             selfHint: "本插件",
@@ -52,6 +59,16 @@ window.__ModuleLoader__.load({
             uninstalling: "卸载中…",
             uninstallTitle: "从 profile 移除该插件包",
             protectedUninstall: "受保护的宿主模块",
+            updateAvailable: "可更新",
+            latestVersion: "最新版本",
+            latestVersionTitle: "最新版本 v{0}",
+            update: "更新",
+            updating: "更新中…",
+            updateTitle: "更新到最新版本（npm registry）",
+            confirmUpdate: "确定更新 {0} 到 v{1}？",
+            confirmUpdateSelf: "注意：这是插件管理器自己，更新期间本页面可能短暂失效。",
+            updatedMsg: "{0} 已更新到 v{1}",
+            updateFail: "{0} 更新失败：{1}",
             empty: "该 profile 尚未安装任何插件。",
             loading: "加载中...",
             loadError: "读取已安装插件失败：",
@@ -74,8 +91,15 @@ window.__ModuleLoader__.load({
             col1: "Single column",
             col2: "Two columns",
             layoutGroup: "List layout",
+            searchPlaceholder: "Search name / description…",
+            searchAria: "Search plugins",
+            metaFiltered: "profile: {0} ｜ {1} / {2} plugin(s)",
+            emptyFiltered: "No matching plugins.",
+            clearFilters: "Clear search",
             stateOn: "Running",
             stateOff: "Stopped",
+            stateError: "Load failed",
+            errorField: "Error",
             toggleOn: "Click to disable (HMR ~1s)",
             toggleOff: "Click to enable (HMR ~1s)",
             selfHint: "This plugin",
@@ -95,6 +119,16 @@ window.__ModuleLoader__.load({
             uninstalling: "Uninstalling…",
             uninstallTitle: "Remove this package from the profile",
             protectedUninstall: "Protected host module",
+            updateAvailable: "Update",
+            latestVersion: "Latest",
+            latestVersionTitle: "Latest version v{0}",
+            update: "Update",
+            updating: "Updating…",
+            updateTitle: "Update to the latest version (npm registry)",
+            confirmUpdate: "Update {0} to v{1}?",
+            confirmUpdateSelf: "Note: this is the plugin manager itself; this page may briefly go down during the update.",
+            updatedMsg: "{0} updated to v{1}",
+            updateFail: "Failed to update {0}: {1}",
             empty: "No plugins installed in this profile.",
             loading: "Loading...",
             loadError: "Failed to load installed plugins: ",
@@ -119,6 +153,11 @@ window.__ModuleLoader__.load({
 .dshpm-seg-btn:hover { color:var(--dsw-alias-label-primary,#333); }
 .dshpm-seg-btn.is-active { background:var(--dsw-alias-button-primary-fill,#4f46e5); color:var(--dsw-alias-label-primary-foreground,#fff); }
 .dshpm-seg-btn svg { width:14px; height:14px; display:block; }
+/* 搜索框与筛选下拉：与分段按钮同高（12px 字号 + 4px 纵向内边距），主题变量配色 */
+.dshpm-search input[type="search"] { box-sizing:border-box; width:190px; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; background:var(--dsw-alias-bg-layer-3,#fff); color:var(--dsw-alias-label-primary,#333); font-size:12px; line-height:18px; padding:4px 10px; outline:none; transition:border-color .16s; }
+.dshpm-search input[type="search"]:focus { border-color:var(--dsw-alias-label-dimmed,#999); }
+.dshpm-search input[type="search"]::placeholder { color:var(--dsw-alias-label-tertiary,#888); }
+.dshpm-search input[type="search"]::-webkit-search-cancel-button { cursor:pointer; }
 /* 两按钮之间的分隔竖线。span 默认 inline、width 不生效，必须显式 block；
    1px 在部分渲染下过细，用 2px + label-dimmed 保证可见 */
 .dshpm-seg-divider { display:block; width:2px; align-self:stretch; background:var(--dsw-alias-label-dimmed,#999); }
@@ -149,6 +188,10 @@ window.__ModuleLoader__.load({
 .dshpm-actions { margin-left:auto; display:flex; align-items:center; gap:12px; flex:none; }
 .dshpm-state { font-size:11px; line-height:17px; white-space:nowrap; color:var(--dsw-alias-label-tertiary,#888); }
 .dshpm-state.is-on { color:var(--dsw-alias-state-success-primary,#1e8e3e); }
+.dshpm-state.is-err { color:var(--dsw-alias-state-error-primary,#d32f2f); font-weight:600; }
+/* 小圆角标签：来源分类（中性）与「可更新」徽标（信息蓝）共用底样式 */
+.dshpm-pill { display:inline-flex; align-items:center; padding:0 8px; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:999px; font-size:11px; line-height:17px; white-space:nowrap; color:var(--dsw-alias-label-tertiary,#888); }
+.dshpm-pill.is-update { color:var(--dsw-alias-state-info-primary,#1967d2); border-color:var(--dsw-alias-state-info-primary,#1967d2); }
 .dshpm-switch { display:inline-block; box-sizing:border-box; width:36px; height:20px; border-radius:10px; padding:2px; cursor:pointer; background:var(--dsw-alias-label-tertiary,#888); transition:background .16s; flex:none; }
 .dshpm-switch.is-on { background:var(--dsw-alias-state-success-primary,#1e8e3e); }
 .dshpm-switch.is-busy { opacity:.5; cursor:wait; }
@@ -218,6 +261,10 @@ window.__ModuleLoader__.load({
             });
             // 语言切换时强制重渲染（t 每次调用读取当前激活词典）
             const [localeTick, setLocaleTick] = useState(0);
+            // 更新检查结果：{ [name]: { latest, update } }（列表加载后异步补充）
+            const [updates, setUpdates] = useState({});
+            // 搜索（内存态：匹配 名称/描述/spec，不区分大小写）
+            const [query, setQuery] = useState("");
 
             useEffect(() => {
                 ensureCss();
@@ -233,6 +280,10 @@ window.__ModuleLoader__.load({
                 try {
                     localStorage.setItem(COLUMNS_KEY, String(n));
                 } catch { /* ignore */ }
+            };
+
+            const clearFilters = () => {
+                setQuery("");
             };
 
             // loadData(silent)：silent=true 用于首次/自动加载（不弹反馈）；
@@ -261,6 +312,20 @@ window.__ModuleLoader__.load({
                 const timer = setTimeout(() => setRefreshedAt(null), 2500);
                 return () => clearTimeout(timer);
             }, [refreshedAt]);
+
+            // 更新检查：跟随列表加载静默拉取；失败静默保留旧结果（host 侧有 5min 缓存）
+            const fetchUpdates = useCallback(async () => {
+                try {
+                    const resp = await fetch("/api/plugin-manager/updates", { cache: "no-store" });
+                    const json = await resp.json();
+                    if (!json.ok) return;
+                    setUpdates(json.updates || {});
+                } catch { /* 静默：检查失败只是不显示徽标 */ }
+            }, []);
+
+            useEffect(() => {
+                if (state.data) fetchUpdates();
+            }, [state.data, fetchUpdates]);
 
             async function post(path, body) {
                 const resp = await fetch(path, {
@@ -326,6 +391,25 @@ window.__ModuleLoader__.load({
                 }
             };
 
+            const update = async (row) => {
+                const info = updates[row.name];
+                const latest = (info && info.latest) || "";
+                const self = row.self ? "\n\n" + t("confirmUpdateSelf") : "";
+                if (!window.confirm(fmt(t("confirmUpdate"), row.name, latest) + self)) return;
+                setPending((s) => ({ ...s, [row.name]: "update" }));
+                setMessage(null);
+                try {
+                    await post("/api/plugin-manager/update", { name: row.name, selfConfirm: true });
+                    setMessage({ type: "ok", text: fmt(t("updatedMsg"), row.name, latest) });
+                    await loadData(true);
+                    fetchUpdates();
+                } catch (e) {
+                    setMessage({ type: "error", text: fmt(t("updateFail"), row.name, e.message) });
+                } finally {
+                    clearPending(row.name);
+                }
+            };
+
             const h = React.createElement;
 
             if (state.loading && !state.data) {
@@ -348,10 +432,30 @@ window.__ModuleLoader__.load({
             const data = state.data || { profile: "", plugins: [] };
             const plugins = data.plugins || [];
 
+            // 搜索过滤：匹配 名称/描述/spec（大小写不敏感）
+            const q = query.trim().toLowerCase();
+            const hasFilter = q !== "";
+            const visible = plugins.filter((row) => {
+                if (q !== "" && !`${row.name}\n${row.description}\n${row.spec}`.toLowerCase().includes(q)) return false;
+                return true;
+            });
+
             return h("div", { className: `dshpm-root${columns === 2 ? " is-cols-2" : ""}` },
                 h("div", { className: "dshpm-toolbar" },
                     h("span", { className: "dshpm-meta" },
-                        fmt(t("meta"), data.profile, plugins.length)
+                        hasFilter
+                            ? fmt(t("metaFiltered"), data.profile, visible.length, plugins.length)
+                            : fmt(t("meta"), data.profile, plugins.length)
+                    ),
+                    // 搜索框：type=search 自带清除按钮
+                    h("div", { className: "dshpm-search" },
+                        h("input", {
+                            type: "search",
+                            value: query,
+                            placeholder: t("searchPlaceholder"),
+                            "aria-label": t("searchAria"),
+                            onChange: (e) => setQuery(e.target.value),
+                        })
                     ),
                     // 单列 / 双列 切换（图标分段按钮，刷新按钮左侧），中间浅色竖线分隔
                     h("div", { className: "dshpm-seg", role: "group", "aria-label": t("layoutGroup") },
@@ -397,12 +501,23 @@ window.__ModuleLoader__.load({
                     className: "dshpm-banner dshpm-banner-ok",
                     "aria-live": "polite",
                 }, fmt(t("refreshedAt"), refreshedAt.toLocaleTimeString())),
-                plugins.length === 0
-                    ? h("div", { className: "dshpm-empty" }, t("empty"))
-                    : h("ul", { className: "dshpm-list" },
-                        plugins.map((row) => {
+                    plugins.length === 0
+                        ? h("div", { className: "dshpm-empty" }, t("empty"))
+                        // 有插件但被搜索滤空：提示 + 一键清除
+                        : visible.length === 0
+                            ? h("div", { className: "dshpm-empty" },
+                                h("div", null, t("emptyFiltered")),
+                                h("div", { style: { marginTop: "10px" } },
+                                    h("button", { className: "dshpm-btn", onClick: clearFilters }, t("clearFilters"))
+                                )
+                            )
+                            : h("ul", { className: "dshpm-list" },
+                            visible.map((row) => {
                             const p = pending[row.name];
-                            const busy = p === "toggle" || p === "uninstall";
+                            const busy = p === "toggle" || p === "uninstall" || p === "update";
+                            // 更新检查结果（npm 源插件才有）；有新版时行内显示徽标
+                            const upd = updates[row.name];
+                            const canUpdate = !!upd && !!upd.update && !row.protected;
                             // 显示名去掉 npm scope（@user/pkg → pkg）；
                             // scope / github 用户名在「安装来源」字段里看（spec 含完整信息）
                             const displayName = row.name.replace(/^@[^/]+\//, "");
@@ -447,8 +562,12 @@ window.__ModuleLoader__.load({
                                         title: row.name,
                                     }, displayName),
                                     h("div", { className: "dshpm-actions" },
-                                        h("span", { className: `dshpm-state${on ? " is-on" : ""}` },
-                                            on ? t("stateOn") : t("stateOff")
+                                        canUpdate ? h("span", {
+                                            className: "dshpm-pill is-update",
+                                            title: fmt(t("latestVersionTitle"), upd.latest),
+                                        }, t("updateAvailable")) : null,
+                                        h("span", { className: `dshpm-state${row.error ? " is-err" : on ? " is-on" : ""}` },
+                                            row.error ? t("stateError") : on ? t("stateOn") : t("stateOff")
                                         ),
                                         h("span", {
                                             role: "switch",
@@ -489,6 +608,23 @@ window.__ModuleLoader__.load({
                                             row.version === "-" ? row.version : `v${row.version}`
                                         )
                                     ),
+                                    // 运行失败信息（fiber FAILED 捕获）：红色、保留换行
+                                    row.error ? h("div", { className: "dshpm-field" },
+                                        h("span", { className: "dshpm-field-key" }, t("errorField")),
+                                        h("span", {
+                                            className: "dshpm-field-val",
+                                            style: {
+                                                color: "var(--dsw-alias-state-error-primary,#d32f2f)",
+                                                whiteSpace: "pre-wrap",
+                                            },
+                                        }, row.error)
+                                    ) : null,
+                                    canUpdate ? h("div", { className: "dshpm-field" },
+                                        h("span", { className: "dshpm-field-key" }, t("latestVersion")),
+                                        h("span", { className: "dshpm-field-val is-code", style: { color: "var(--dsw-alias-state-info-primary,#1967d2)" } },
+                                            `v${upd.latest}`
+                                        )
+                                    ) : null,
                                     h("div", { className: "dshpm-field" },
                                         h("span", { className: "dshpm-field-key" }, t("source")),
                                         h("span", { className: "dshpm-field-val" },
@@ -525,6 +661,13 @@ window.__ModuleLoader__.load({
                                         h("span", { className: "dshpm-field-val" }, row.description || t("noDescription"))
                                     ),
                                     h("div", { className: "dshpm-detail-actions" },
+                                        // 更新按钮：有新版且非宿主模块时显示（自身可更新，确认框有提示）
+                                        canUpdate ? h("button", {
+                                            className: "dshpm-btn",
+                                            disabled: busy,
+                                            title: t("updateTitle"),
+                                            onClick: () => update(row),
+                                        }, p === "update" ? t("updating") : t("update")) : null,
                                         !row.protected && !row.self ? h("button", {
                                             className: "dshpm-btn dshpm-btn-danger",
                                             disabled: busy,
