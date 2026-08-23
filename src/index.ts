@@ -60,7 +60,7 @@ function locateProfile(ctx: Context): { patchPath: string; profile: string } {
   for (const entry of ctx.loader.entries()) {
     const opts = entry.options
     if (opts?.name !== 'cordis:include' || typeof opts.config?.path !== 'string') continue
-    if (!opts.config.path.includes('cordis.yml')) continue
+    if (!opts.config.path.endsWith('cordis.yml')) continue
     let includePath = opts.config.path
     if (includePath.startsWith('file://')) {
       try {
