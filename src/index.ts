@@ -45,6 +45,21 @@ declare module '@deepseek-ai/cordis' {
 export const name = 'dsh-plugin-mgr'
 export const inject = ['webServer', 'loader']
 
+/** 内部纯逻辑导出：仅供单测（test/）使用，不属于插件对外 API。 */
+export const _internal = {
+  readUserPatchState,
+  appendPatchEntry,
+  prepareAppend,
+  rowBlock,
+  withPlaceholderRestored,
+  escapeRegExp,
+  disableRows,
+  enableRows,
+  removeRowBlocks,
+  cleanRepoUrl,
+  sourceTypeOf,
+}
+
 // ── profile 定位 ───────────────────────────────────────────────────────────
 
 function dshHome(): string {
