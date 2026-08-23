@@ -313,12 +313,15 @@ function rowIdsForPackage(ctx: Context, profileDir: string, packageName: string)
   // 2. 惯例位置
   collectInsertIds(join(packageDir, 'cordis.patch.yml'))
 
-  // 3. loader 当前 entry
+  // 3. loader 当前 entry。prefix 取与 locateProfile 相同的 include 层
+  //（第一个读 cordis.yml 的 entry），避免多层 include 时两者口径不一。
   let prefix = ''
   for (const entry of ctx.loader.entries()) {
-    if (entry.options?.name === 'cordis:include' && typeof entry.options.id === 'string') {
-      prefix = `${entry.options.id}:`
-    }
+    const opts = entry.options
+    if (opts?.name !== 'cordis:include' || typeof opts.id !== 'string') continue
+    if (typeof opts.config?.path !== 'string' || !opts.config.path.endsWith('cordis.yml')) continue
+    prefix = `${opts.id}:`
+    break
   }
   for (const entry of ctx.loader.entries()) {
     if (entry.options?.name !== packageName) continue
