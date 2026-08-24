@@ -308,6 +308,9 @@ window.__ModuleLoader__.load({
 
             // 根容器引用：用于按视口计算可用高度
             const rootRef = React.useRef(null);
+            // 列表数据是否已就绪：首屏是 loading 分支（无 ref 元素），
+            // 数据到位后才出现带 ref 的根容器，effect 需随之重跑
+            const hasList = !!state.data && !state.error;
 
             useEffect(() => {
                 ensureCss();
@@ -322,15 +325,17 @@ window.__ModuleLoader__.load({
                     el.style.maxHeight = `${Math.max(avail, 240)}px`;
                 };
                 fit();
-                // 视口尺寸 / 宿主布局变化（侧栏折叠、横幅出现等）时重算
+                // 视口尺寸 / 宿主布局变化（侧栏折叠、横幅出现等）时重算；
+                // 同时观察根元素自身（工具栏换行等会改变其内部布局）
                 const ro = new ResizeObserver(fit);
                 ro.observe(document.body);
+                ro.observe(el);
                 window.addEventListener("resize", fit);
                 return () => {
                     ro.disconnect();
                     window.removeEventListener("resize", fit);
                 };
-            }, []);
+            }, [hasList]);
 
             // 添加 toast 通知；成功自动 4s 消失，失败需手动关闭
             const addToast = useCallback((type, text) => {
