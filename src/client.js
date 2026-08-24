@@ -311,21 +311,42 @@ window.__ModuleLoader__.load({
                 // 标题本身通常透明，故从标题元素起沿祖先向上找第一个不透明背景，
                 // 写入 --dshpm-bg 供 sticky 元素使用（注意不能读 tablist 自身——
                 // 我们的 CSS 已给它设置了背景，会读到自己的回退值）。
-                const root = document.querySelector(".dshpm-root");
-                const section = root ? root.closest("section, [class*='section']") : null;
-                const anchor =
-                    section?.querySelector("h1, h2, h3") ||
-                    document.querySelector("[role='tablist']") ||
-                    root;
-                let el = anchor;
-                while (el && el !== document.documentElement) {
-                    const bg = getComputedStyle(el).backgroundColor;
-                    if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
-                        document.documentElement.style.setProperty("--dshpm-bg", bg);
-                        break;
-                    }
-                    el = el.parentElement;
-                }
+                // 主题切换（body[data-ds-dark-theme] / .dark / 系统偏好）时重读，
+                // 否则缓存的固定色值不跟随主题翻转，深浅色下显示异常。
+                const syncBgColor = () => {
+                    // 等一帧让宿主样式按新主题完成重算后再读取
+                    requestAnimationFrame(() => {
+                        const rootEl = document.querySelector(".dshpm-root");
+                        const section = rootEl ? rootEl.closest("section, [class*='section']") : null;
+                        const anchor =
+                            section?.querySelector("h1, h2, h3") ||
+                            document.querySelector("[role='tablist']") ||
+                            rootEl;
+                        let el = anchor;
+                        while (el && el !== document.documentElement) {
+                            const bg = getComputedStyle(el).backgroundColor;
+                            if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
+                                document.documentElement.style.setProperty("--dshpm-bg", bg);
+                                return;
+                            }
+                            el = el.parentElement;
+                        }
+                    });
+                };
+                syncBgColor();
+                // 宿主通过 body[data-ds-dark-theme] 属性 + .dark 类切换主题，
+                // 观察两者变化；再兜底监听系统深浅色偏好（跟随系统模式）
+                const observer = new MutationObserver(syncBgColor);
+                observer.observe(document.body, {
+                    attributes: true,
+                    attributeFilter: ["class", "data-ds-dark-theme", "style"],
+                });
+                const mql = window.matchMedia("(prefers-color-scheme: dark)");
+                mql.addEventListener("change", syncBgColor);
+                return () => {
+                    observer.disconnect();
+                    mql.removeEventListener("change", syncBgColor);
+                };
             }, []);
 
             // 添加 toast 通知；成功自动 4s 消失，失败需手动关闭
