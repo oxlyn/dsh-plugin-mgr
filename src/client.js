@@ -306,18 +306,24 @@ window.__ModuleLoader__.load({
 
             useEffect(() => {
                 ensureCss();
-                // 动态获取父元素背景色，确保 sticky 元素与宿主一致
-                const root = document.querySelector('.dshpm-root');
-                if (root) {
-                    let el = root.parentElement;
-                    while (el && el !== document.body) {
-                        const bg = getComputedStyle(el).backgroundColor;
-                        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-                            root.style.setProperty('--dshpm-bg', bg);
-                            break;
-                        }
-                        el = el.parentElement;
+                // 读取页面最上方「插件」标题区域的实际背景色：
+                // 标题本身通常透明，故从标题元素起沿祖先向上找第一个不透明背景，
+                // 写入 --dshpm-bg 供 sticky 元素使用（注意不能读 tablist 自身——
+                // 我们的 CSS 已给它设置了背景，会读到自己的回退值）。
+                const root = document.querySelector(".dshpm-root");
+                const section = root ? root.closest("section, [class*='section']") : null;
+                const anchor =
+                    section?.querySelector("h1, h2, h3") ||
+                    document.querySelector("[role='tablist']") ||
+                    root;
+                let el = anchor;
+                while (el && el !== document.documentElement) {
+                    const bg = getComputedStyle(el).backgroundColor;
+                    if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
+                        document.documentElement.style.setProperty("--dshpm-bg", bg);
+                        break;
                     }
+                    el = el.parentElement;
                 }
             }, []);
 
