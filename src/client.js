@@ -173,8 +173,9 @@ window.__ModuleLoader__.load({
 .dshpm-seg-btn.is-active { background:var(--dsw-alias-button-primary-fill,#4f46e5); color:var(--dsw-alias-label-primary-foreground,#fff); }
 .dshpm-seg-btn svg { width:14px; height:14px; display:block; }
 /* 搜索框与筛选下拉：与分段按钮同高（12px 字号 + 4px 纵向内边距），主题变量配色 */
-.dshpm-search input[type="search"] { box-sizing:border-box; width:190px; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; background:var(--dsw-alias-bg-layer-3,#fff); color:var(--dsw-alias-label-primary,#333); font-size:12px; line-height:18px; padding:4px 10px; outline:none; transition:border-color .16s; }
-.dshpm-search input[type="search"]:focus { border-color:var(--dsw-alias-label-dimmed,#999); }
+/* 搜索框配色对齐宿主「插件列表」搜索框：bg-layer-1 底 + 聚焦时业务色描边 */
+.dshpm-search input[type="search"] { box-sizing:border-box; width:190px; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; background:var(--dsw-alias-bg-layer-1,#f5f5f5); color:var(--dsw-alias-label-primary,#333); font-size:12px; line-height:18px; padding:4px 10px; outline:none; transition:border-color .16s,box-shadow .16s; }
+.dshpm-search input[type="search"]:focus { border-color:var(--dsw-alias-state-business-primary,#1967d2); box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary,#1967d2) 18%, transparent); }
 .dshpm-search input[type="search"]::placeholder { color:var(--dsw-alias-label-tertiary,#888); }
 .dshpm-search input[type="search"]::-webkit-search-cancel-button { cursor:pointer; }
 /* 两按钮之间的分隔竖线。span 默认 inline、width 不生效，必须显式 block；
