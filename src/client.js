@@ -161,11 +161,12 @@ window.__ModuleLoader__.load({
 
         // ── 样式表（一次性注入；类名 dshpm- 前缀隔离）────────────────────────
         const CSS = `
-/* 宿主 tab 标题栏固定 */
-[role="tablist"] { position:sticky; top:0; z-index:20; background:var(--dshpm-bg, var(--dsw-alias-bg-module-platform, #f5f5f5)); padding-top:8px; margin-top:-8px; }
-.dshpm-root { color:var(--dsw-alias-label-primary,#333); }
-.dshpm-sticky { position:sticky; top:44px; z-index:10; background:var(--dshpm-bg, var(--dsw-alias-bg-module-platform, #f5f5f5)); padding-bottom:8px; }
-.dshpm-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+/* 布局：根容器限高（JS 按视口计算），只有列表区滚动。
+   不用 sticky —— 所有元素保持透明，直接复用宿主主题背景，深浅色天然一致 */
+.dshpm-root { display:flex; flex-direction:column; gap:12px; color:var(--dsw-alias-label-primary,#333); overflow:hidden; }
+.dshpm-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex:none; }
+/* 列表滚动区：占满剩余高度，内部滚动；overscroll 防止滚到底带动外层页面 */
+.dshpm-list-area { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 .dshpm-meta { font-size:13px; color:var(--dsw-alias-label-tertiary,#888); margin-right:auto; }
 .dshpm-seg { display:inline-flex; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; overflow:hidden; }
 .dshpm-seg-btn { border:none; background:transparent; padding:4px 10px; font-size:12px; line-height:18px; cursor:pointer; color:var(--dsw-alias-label-tertiary,#888); transition:color .16s,background .16s; display:inline-flex; align-items:center; justify-content:center; }
@@ -305,47 +306,29 @@ window.__ModuleLoader__.load({
             // 搜索（内存态：匹配 名称/描述/spec，不区分大小写）
             const [query, setQuery] = useState("");
 
+            // 根容器引用：用于按视口计算可用高度
+            const rootRef = React.useRef(null);
+
             useEffect(() => {
                 ensureCss();
-                // 读取页面最上方「插件」标题区域的实际背景色：
-                // 标题本身通常透明，故从标题元素起沿祖先向上找第一个不透明背景，
-                // 写入 --dshpm-bg 供 sticky 元素使用（注意不能读 tablist 自身——
-                // 我们的 CSS 已给它设置了背景，会读到自己的回退值）。
-                // 主题切换（body[data-ds-dark-theme] / .dark / 系统偏好）时重读，
-                // 否则缓存的固定色值不跟随主题翻转，深浅色下显示异常。
-                const syncBgColor = () => {
-                    // 等一帧让宿主样式按新主题完成重算后再读取
-                    requestAnimationFrame(() => {
-                        const rootEl = document.querySelector(".dshpm-root");
-                        const section = rootEl ? rootEl.closest("section, [class*='section']") : null;
-                        const anchor =
-                            section?.querySelector("h1, h2, h3") ||
-                            document.querySelector("[role='tablist']") ||
-                            rootEl;
-                        let el = anchor;
-                        while (el && el !== document.documentElement) {
-                            const bg = getComputedStyle(el).backgroundColor;
-                            if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
-                                document.documentElement.style.setProperty("--dshpm-bg", bg);
-                                return;
-                            }
-                            el = el.parentElement;
-                        }
-                    });
+                // 高度自适应：根容器限高到「视口底部 - 余量」，让外层页面不产生滚动，
+                // tab 标题 / 工具栏天然固定；列表区（.dshpm-list-area）内部滚动。
+                // 不用 sticky、不用任何自定义背景色 —— 深浅色主题天然一致。
+                const el = rootRef.current;
+                if (!el) return;
+                const fit = () => {
+                    const top = el.getBoundingClientRect().top;
+                    const avail = window.innerHeight - top - 24; // 24px 底部余量
+                    el.style.maxHeight = `${Math.max(avail, 240)}px`;
                 };
-                syncBgColor();
-                // 宿主通过 body[data-ds-dark-theme] 属性 + .dark 类切换主题，
-                // 观察两者变化；再兜底监听系统深浅色偏好（跟随系统模式）
-                const observer = new MutationObserver(syncBgColor);
-                observer.observe(document.body, {
-                    attributes: true,
-                    attributeFilter: ["class", "data-ds-dark-theme", "style"],
-                });
-                const mql = window.matchMedia("(prefers-color-scheme: dark)");
-                mql.addEventListener("change", syncBgColor);
+                fit();
+                // 视口尺寸 / 宿主布局变化（侧栏折叠、横幅出现等）时重算
+                const ro = new ResizeObserver(fit);
+                ro.observe(document.body);
+                window.addEventListener("resize", fit);
                 return () => {
-                    observer.disconnect();
-                    mql.removeEventListener("change", syncBgColor);
+                    ro.disconnect();
+                    window.removeEventListener("resize", fit);
                 };
             }, []);
 
@@ -563,9 +546,8 @@ window.__ModuleLoader__.load({
                 return true;
             });
 
-            return h("div", { className: `dshpm-root${columns === 2 ? " is-cols-2" : ""}` },
-                h("div", { className: "dshpm-sticky" },
-                    h("div", { className: "dshpm-toolbar" },
+            return h("div", { ref: rootRef, className: `dshpm-root${columns === 2 ? " is-cols-2" : ""}` },
+                h("div", { className: "dshpm-toolbar" },
                     h("span", { className: "dshpm-meta" },
                         hasFilter
                             ? fmt(t("metaFiltered"), data.profile, visible.length, plugins.length)
@@ -614,16 +596,16 @@ window.__ModuleLoader__.load({
                         disabled: state.loading && !!state.data,
                         onClick: () => loadData(false),
                     }, state.loading && state.data ? t("refreshing") : t("refresh"))
-                    ),
-                    state.error && state.data && h("div", {
-                        className: "dshpm-banner dshpm-banner-err",
-                    }, t("loadError"), state.error),
-                    refreshedAt !== null && h("div", {
-                        className: "dshpm-banner dshpm-banner-ok",
-                        "aria-live": "polite",
-                    }, fmt(t("refreshedAt"), refreshedAt.toLocaleTimeString()))
                 ),
-                plugins.length === 0
+                state.error && state.data && h("div", {
+                    className: "dshpm-banner dshpm-banner-err",
+                }, t("loadError"), state.error),
+                refreshedAt !== null && h("div", {
+                    className: "dshpm-banner dshpm-banner-ok",
+                    "aria-live": "polite",
+                }, fmt(t("refreshedAt"), refreshedAt.toLocaleTimeString())),
+                h("div", { className: "dshpm-list-area" },
+                    plugins.length === 0
                         ? h("div", { className: "dshpm-empty" }, t("empty"))
                         // 有插件但被搜索滤空：提示 + 一键清除
                         : visible.length === 0
@@ -808,9 +790,10 @@ window.__ModuleLoader__.load({
                                         }, row.self ? t("selfHint") : t("protectedUninstall"))
                                     )
                                 ) : null
-                            );
+                             );
                         })
-                    ),
+                    )
+                ),
                 // 确认模态框（dshmarket 同款平台 Modal）：更新 / 卸载 二次确认
                 confirming !== null && hasModal ? h(Modal, {
                     open: true,
