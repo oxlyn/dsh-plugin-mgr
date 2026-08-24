@@ -162,9 +162,9 @@ window.__ModuleLoader__.load({
         // ── 样式表（一次性注入；类名 dshpm- 前缀隔离）────────────────────────
         const CSS = `
 /* 宿主 tab 标题栏固定 */
-[role="tablist"] { position:sticky; top:0; z-index:20; background:var(--dsw-alias-bg-layer-1,#f5f5f5); padding-top:8px; margin-top:-8px; }
+[role="tablist"] { position:sticky; top:0; z-index:20; background:inherit; padding-top:8px; margin-top:-8px; }
 .dshpm-root { color:var(--dsw-alias-label-primary,#333); }
-.dshpm-sticky { position:sticky; top:44px; z-index:10; background:var(--dsw-alias-bg-layer-1,#f5f5f5); padding-bottom:8px; }
+.dshpm-sticky { position:sticky; top:44px; z-index:10; background:inherit; padding-bottom:8px; }
 .dshpm-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .dshpm-meta { font-size:13px; color:var(--dsw-alias-label-tertiary,#888); margin-right:auto; }
 .dshpm-seg { display:inline-flex; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; overflow:hidden; }
