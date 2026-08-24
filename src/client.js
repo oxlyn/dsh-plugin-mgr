@@ -314,14 +314,34 @@ window.__ModuleLoader__.load({
 
             useEffect(() => {
                 ensureCss();
-                // 高度自适应：根容器限高到「视口底部 - 余量」，让外层页面不产生滚动，
-                // tab 标题 / 工具栏天然固定；列表区（.dshpm-list-area）内部滚动。
-                // 不用 sticky、不用任何自定义背景色 —— 深浅色主题天然一致。
+                // 高度自适应：根容器限高到「宿主滚动容器的内容区底部」，
+                // 让外层面板不产生第二条滚动条（全程只有列表区自己的滚动条）。
+                // tab 标题 / 工具栏天然固定；不用 sticky、不用自定义背景色。
                 const el = rootRef.current;
                 if (!el) return;
+                // 向上找最近的滚动容器（overflow-y 为 auto/scroll 的祖先）
+                const findScrollParent = (node) => {
+                    let p = node.parentElement;
+                    while (p && p !== document.body) {
+                        const oy = getComputedStyle(p).overflowY;
+                        if (oy === "auto" || oy === "scroll" || oy === "overlay") return p;
+                        p = p.parentElement;
+                    }
+                    return null;
+                };
                 const fit = () => {
                     const top = el.getBoundingClientRect().top;
-                    const avail = window.innerHeight - top - 24; // 24px 底部余量
+                    const sp = findScrollParent(el);
+                    let avail;
+                    if (sp) {
+                        // 贴住滚动容器内容区底部：容器底边 - 其 padding-bottom - 组件顶边
+                        const sr = sp.getBoundingClientRect();
+                        const pb = parseFloat(getComputedStyle(sp).paddingBottom) || 0;
+                        avail = sr.bottom - pb - top - 4; // 4px 呼吸余量
+                    } else {
+                        // 找不到滚动容器时回退为视口估算
+                        avail = window.innerHeight - top - 24;
+                    }
                     el.style.maxHeight = `${Math.max(avail, 240)}px`;
                 };
                 fit();
