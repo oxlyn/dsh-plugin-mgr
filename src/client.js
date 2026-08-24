@@ -162,9 +162,9 @@ window.__ModuleLoader__.load({
         // ── 样式表（一次性注入；类名 dshpm- 前缀隔离）────────────────────────
         const CSS = `
 /* 宿主 tab 标题栏固定 */
-[role="tablist"] { position:sticky; top:0; z-index:20; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); background:color-mix(in srgb, var(--dsw-alias-bg-module-platform, #f5f5f5) 85%, transparent); padding-top:8px; margin-top:-8px; }
+[role="tablist"] { position:sticky; top:0; z-index:20; background:var(--dshpm-bg, var(--dsw-alias-bg-module-platform, #f5f5f5)); padding-top:8px; margin-top:-8px; }
 .dshpm-root { color:var(--dsw-alias-label-primary,#333); }
-.dshpm-sticky { position:sticky; top:44px; z-index:10; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); background:color-mix(in srgb, var(--dsw-alias-bg-module-platform, #f5f5f5) 85%, transparent); padding-bottom:8px; }
+.dshpm-sticky { position:sticky; top:44px; z-index:10; background:var(--dshpm-bg, var(--dsw-alias-bg-module-platform, #f5f5f5)); padding-bottom:8px; }
 .dshpm-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .dshpm-meta { font-size:13px; color:var(--dsw-alias-label-tertiary,#888); margin-right:auto; }
 .dshpm-seg { display:inline-flex; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; overflow:hidden; }
@@ -306,6 +306,19 @@ window.__ModuleLoader__.load({
 
             useEffect(() => {
                 ensureCss();
+                // 动态获取父元素背景色，确保 sticky 元素与宿主一致
+                const root = document.querySelector('.dshpm-root');
+                if (root) {
+                    let el = root.parentElement;
+                    while (el && el !== document.body) {
+                        const bg = getComputedStyle(el).backgroundColor;
+                        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+                            root.style.setProperty('--dshpm-bg', bg);
+                            break;
+                        }
+                        el = el.parentElement;
+                    }
+                }
             }, []);
 
             // 添加 toast 通知；成功自动 4s 消失，失败需手动关闭
