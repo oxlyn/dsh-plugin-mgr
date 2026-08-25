@@ -105,11 +105,36 @@ pnpm run build       # 构建 dist/
 
 ```
 dsh-plugin-mgr/
-├── src/index.ts          # host 侧：list/updates/toggle/uninstall/update 五条路由 + 补丁层读写
-├── src/client.js         # client 侧：插件管理 tab（卡片 UI + 中英词典）
-├── cordis.patch.yml      # bundle 层声明（id/name 走包名解析）
-└── dist/                 # 构建产物（npm 发布包含在 files 字段中）
+├── src/index.ts              # host 入口：插件元数据 + 路由注册 + 单测导出聚合
+├── src/server/               # host 侧按职责拆分的模块
+│   ├── types.ts              #   共享类型 + cordis Context 声明
+│   ├── paths.ts              #   profile / 用户补丁层定位
+│   ├── patch-layer.ts        #   补丁层逐行读写（启停落盘）
+│   ├── rows.ts               #   每个包拥有的补丁行 id
+│   ├── lifecycle.ts          #   dsh CLI 子进程（卸载/更新）
+│   ├── fiber-watch.ts        #   运行失败捕获（fiber FAILED 归因）
+│   ├── registry.ts           #   npm 更新检查（semver/.npmrc/packument）
+│   ├── inspect.ts            #   已安装列表组装
+│   └── http.ts               #   JSON 收发 + 参数校验
+├── src/shared/api-paths.ts   # API 路径常量（host 与 client 同源引用）
+├── src/client/               # client 侧（esbuild 打包为 dist/client.js）
+│   ├── main.js               #   boot() 工厂入口 + apply()
+│   ├── context.js            #   平台 require 桥（React/hooks/UI 原语）
+│   ├── i18n.js               #   zh/en 词典 + fmt
+│   ├── styles.js             #   CSS 注入
+│   ├── api.js                #   HTTP 封装
+│   ├── toast.js              #   Toast 队列 hook + 渲染
+│   ├── PluginManagerTab.js   #   tab 主组件（状态编排）
+│   └── components/           #   Toolbar / PluginCard / ConfirmModal
+├── scripts/build-client.mjs  # esbuild 打包脚本
+├── cordis.patch.yml          # bundle 层声明（id/name 走包名解析）
+└── dist/                     # 构建产物（npm 发布包含在 files 字段中）
 ```
+
+client 产物约束：`dist/client.js` 必须是单文件 IIFE，尾部追加
+`__ModuleLoader__.load(...)` 调用；平台依赖（react、UI 原语）在运行期经
+`context.js` 桥接解析，因此打包无需 external 配置。业务模块禁止在模块顶层
+取用平台模块（bundle 求值早于工厂执行）。
 
 ## 友情链接 / Links
 

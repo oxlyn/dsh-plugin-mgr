@@ -22,3 +22,6 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# pnpm 本地包存储
+.pnpm-store/

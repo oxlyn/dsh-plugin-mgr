@@ -107,11 +107,37 @@ Project layout:
 
 ```
 dsh-plugin-mgr/
-├── src/index.ts          # host side: list/updates/toggle/uninstall/update routes + patch-layer I/O
-├── src/client.js         # client side: manager tab (card UI + zh/en dictionaries)
-├── cordis.patch.yml      # bundle layer declaration (id/name resolve as package names)
-└── dist/                 # build output (included in the published files field)
+├── src/index.ts              # host entry: metadata + route registration + test exports
+├── src/server/               # host-side modules by responsibility
+│   ├── types.ts              #   shared types + cordis Context augmentation
+│   ├── paths.ts              #   profile / user patch-layer location
+│   ├── patch-layer.ts        #   patch-layer line-level read/write (enable/disable)
+│   ├── rows.ts               #   patch row ids owned by each package
+│   ├── lifecycle.ts          #   dsh CLI subprocess (uninstall/update)
+│   ├── fiber-watch.ts        #   runtime failure capture (fiber FAILED attribution)
+│   ├── registry.ts           #   npm update check (semver/.npmrc/packument)
+│   ├── inspect.ts            #   installed-list assembly
+│   └── http.ts               #   JSON I/O + input validation
+├── src/shared/api-paths.ts   # API path constants (shared by host & client)
+├── src/client/               # client side (bundled into dist/client.js via esbuild)
+│   ├── main.js               #   boot() factory entry + apply()
+│   ├── context.js            #   platform require bridge (React/hooks/primitives)
+│   ├── i18n.js               #   zh/en dictionaries + fmt
+│   ├── styles.js             #   CSS injection
+│   ├── api.js                #   HTTP wrapper
+│   ├── toast.js              #   toast queue hook + renderer
+│   ├── PluginManagerTab.js   #   tab root component (state orchestration)
+│   └── components/           #   Toolbar / PluginCard / ConfirmModal
+├── scripts/build-client.mjs  # esbuild bundling script
+├── cordis.patch.yml          # bundle layer declaration (id/name resolve as package names)
+└── dist/                     # build output (included in the published files field)
 ```
+
+Client artifact constraint: `dist/client.js` must be a single-file IIFE with the
+`__ModuleLoader__.load(...)` call appended at the end. Platform dependencies
+(react, UI primitives) are resolved at runtime through the `context.js` bridge,
+so bundling needs no externals config. Business modules must not touch platform
+modules at module top level (bundle evaluation runs before the factory).
 
 ## Links
 
