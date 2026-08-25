@@ -336,6 +336,6 @@ export function PluginManagerTab({ t, locale }) {
             onConfirm: onConfirmAction,
         }),
         // Toast 通知容器：固定在视口正中央
-        h(ToastHost, { toasts, onDismiss: dismissToast })
+        h(ToastHost, { toasts, onDismiss: dismissToast, t })
     );
 }

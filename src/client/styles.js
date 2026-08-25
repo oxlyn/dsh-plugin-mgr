@@ -97,11 +97,14 @@ export const CSS = `
 .dshpm-banner-ok { background:var(--dsw-alias-state-success-bg,#e6f4ea); color:var(--dsw-alias-state-success-primary,#1e8e3e); }
 .dshpm-banner-err { background:var(--dsw-alias-state-error-bg,#fce8e6); color:var(--dsw-alias-state-error-primary,#d32f2f); white-space:pre-wrap; }
 /* Toast 通知容器：固定在视口正中央，不随页面滚动 */
-.dshpm-toast-container { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:10000; display:flex; flex-direction:column-reverse; gap:8px; pointer-events:none; align-items:center; }
-.dshpm-toast { pointer-events:auto; font-size:13px; line-height:1.5; padding:10px 16px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.15); word-break:break-all; max-width:360px; animation:dshpm-toast-in .3s ease-out; transition:opacity .3s,transform .3s; }
+.dshpm-toast-container { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:10000; display:flex; flex-direction:column-reverse; gap:8px; pointer-events:none; align-items:center; max-height:80vh; }
+.dshpm-toast { pointer-events:auto; box-sizing:border-box; font-size:13px; line-height:1.5; padding:10px 16px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.15); word-break:break-all; max-width:360px; max-height:60vh; overflow:hidden; animation:dshpm-toast-in .3s ease-out; transition:opacity .3s,transform .3s; }
 .dshpm-toast.is-leaving { opacity:0; transform:translateY(10px); }
-.dshpm-toast-ok { background:var(--dsw-alias-state-success-bg,#e6f4ea); color:var(--dsw-alias-state-success-primary,#1e8e3e); border:1px solid var(--dsw-alias-state-success-primary,#1e8e3e); }
+.dshpm-toast-ok { background:var(--dsw-alias-state-success-bg,#e6f4ea); color:var(--dsw-alias-state-success-primary,#1e8e3e); border:1px solid var(--dsw-alias-state-success-primary,#1e8e3e); white-space:pre-wrap; }
 .dshpm-toast-err { background:var(--dsw-alias-state-error-bg,#fce8e6); color:var(--dsw-alias-state-error-primary,#d32f2f); border:1px solid var(--dsw-alias-state-error-primary,#d32f2f); white-space:pre-wrap; display:flex; align-items:flex-start; gap:12px; }
+/* 错误文本：默认最多 6 行缩略（点击展开全文），防止超长信息撑爆居中容器 */
+.dshpm-toast-text { min-width:0; flex:1 1 auto; cursor:default; }
+.dshpm-toast-text.is-clamped { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:6; overflow:hidden; cursor:pointer; }
 .dshpm-toast-close { flex:none; width:18px; height:18px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:.6; transition:opacity .16s; border:none; background:transparent; padding:0; color:inherit; }
 .dshpm-toast-close:hover { opacity:1; }
 .dshpm-toast-close svg { width:14px; height:14px; display:block; }
