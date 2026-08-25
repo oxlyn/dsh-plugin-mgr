@@ -18,11 +18,23 @@ export const CSS = `
 .dshpm-seg-btn:hover { color:var(--dsw-alias-label-primary,#333); }
 .dshpm-seg-btn.is-active { background:var(--dsw-alias-button-primary-fill,#4f46e5); color:var(--dsw-alias-label-primary-foreground,#fff); }
 .dshpm-seg-btn svg { width:14px; height:14px; display:block; }
-/* 搜索框配色对齐宿主「插件列表」搜索框：bg-layer-1 底 + 聚焦时业务色描边 */
-.dshpm-search input[type="search"] { box-sizing:border-box; width:190px; border:1px solid var(--dsw-alias-border-l2,#ddd); border-radius:8px; background:var(--dsw-alias-bg-layer-1,#f5f5f5); color:var(--dsw-alias-label-primary,#333); font-size:12px; line-height:18px; padding:4px 10px; outline:none; transition:border-color .16s,box-shadow .16s; }
-.dshpm-search input[type="search"]:focus { border-color:var(--dsw-alias-state-business-primary,#1967d2); box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary,#1967d2) 18%, transparent); }
-.dshpm-search input[type="search"]::placeholder { color:var(--dsw-alias-label-tertiary,#888); }
-.dshpm-search input[type="search"]::-webkit-search-cancel-button { cursor:pointer; }
+/* 可折叠搜索框：默认 28px 圆形图标按钮，点击后容器向左滑开到 190px。
+   展开态最左是搜索图标（input 让出 padding-left），有内容时右侧出现清除按钮 */
+.dshpm-search { flex:none; }
+.dshpm-search-box { position:relative; display:flex; align-items:center; box-sizing:border-box; width:28px; height:28px; border:1px solid transparent; border-radius:999px; background:transparent; overflow:hidden; transition:width .25s ease,border-color .16s,background .16s,box-shadow .16s; }
+.dshpm-search.is-open .dshpm-search-box { width:190px; border-color:var(--dsw-alias-border-l2,#ddd); background:var(--dsw-alias-bg-layer-1,#f5f5f5); }
+.dshpm-search.is-open .dshpm-search-box:focus-within { border-color:var(--dsw-alias-state-business-primary,#1967d2); box-shadow:0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary,#1967d2) 18%, transparent); }
+.dshpm-search-box input[type="text"] { box-sizing:border-box; width:100%; min-width:0; border:none; outline:none; background:transparent; color:var(--dsw-alias-label-primary,#333); font-size:12px; line-height:18px; padding:0 24px 0 30px; opacity:0; pointer-events:none; transition:opacity .18s ease; }
+.dshpm-search.is-open .dshpm-search-box input[type="text"] { opacity:1; pointer-events:auto; }
+.dshpm-search-box input[type="text"]::placeholder { color:var(--dsw-alias-label-tertiary,#888); }
+/* 左侧搜索图标：折叠态即整个控件（可点展开），展开态点击=聚焦输入框 */
+.dshpm-search-icon { position:absolute; left:0; top:0; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border:none; background:transparent; padding:0; cursor:pointer; color:var(--dsw-alias-label-tertiary,#888); transition:color .16s; flex:none; }
+.dshpm-search-icon:hover { color:var(--dsw-alias-label-primary,#333); }
+.dshpm-search-icon svg { width:15px; height:15px; display:block; }
+/* 右侧清除按钮：仅展开且有内容时渲染 */
+.dshpm-search-clear { position:absolute; right:4px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border:none; border-radius:50%; background:transparent; padding:0; cursor:pointer; color:var(--dsw-alias-label-tertiary,#888); transition:color .16s,background .16s; flex:none; }
+.dshpm-search-clear:hover { color:var(--dsw-alias-label-primary,#333); background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06)); }
+.dshpm-search-clear svg { width:12px; height:12px; display:block; }
 /* 两按钮之间的分隔竖线。span 默认 inline、width 不生效，必须显式 block；
    1px 在部分渲染下过细，用 2px + label-dimmed 保证可见 */
 .dshpm-seg-divider { display:block; width:2px; align-self:stretch; background:var(--dsw-alias-label-dimmed,#999); }
