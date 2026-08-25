@@ -131,10 +131,10 @@ export function PluginManagerTab({ t, locale }) {
         loadData(true);
     }, [loadData]);
 
-    // 刷新横幅 2.5s 后自动消失
+    // 刷新横幅 1.5s 后自动消失
     useEffect(() => {
         if (refreshedAt === null) return;
-        const timer = setTimeout(() => setRefreshedAt(null), 2500);
+        const timer = setTimeout(() => setRefreshedAt(null), 1500);
         return () => clearTimeout(timer);
     }, [refreshedAt]);
 
