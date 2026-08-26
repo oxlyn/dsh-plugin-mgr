@@ -141,6 +141,6 @@ export const en = {
 };
 
 /** {0}/{1} 占位替换 */
-export function fmt(s, ...args) {
-    return args.reduce((acc, v, i) => acc.replace(`{${i}}`, String(v)), s);
+export function fmt(s: string, ...args: unknown[]): string {
+    return args.reduce<string>((acc, v, i) => acc.replace(`{${i}}`, String(v)), s)
 }
