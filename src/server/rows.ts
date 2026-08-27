@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { load as parseYaml } from 'js-yaml'
+import { chooseIncludeLayer } from './paths.js'
 
 /**
  * 一个已安装包拥有的 loader 行 id：
@@ -50,16 +51,10 @@ export function rowIdsForPackage(ctx: Context, profileDir: string, packageName: 
   // 2. 惯例位置
   collectInsertIds(join(packageDir, 'cordis.patch.yml'))
 
-  // 3. loader 当前 entry。prefix 取与 locateProfile 相同的 include 层
-  //（第一个读 cordis.yml 的 entry），避免多层 include 时两者口径不一。
-  let prefix = ''
-  for (const entry of ctx.loader.entries()) {
-    const opts = entry.options
-    if (opts?.name !== 'cordis:include' || typeof opts.id !== 'string') continue
-    if (typeof opts.config?.path !== 'string' || !opts.config.path.endsWith('cordis.yml')) continue
-    prefix = `${opts.id}:`
-    break
-  }
+  // 3. loader 当前 entry。前缀取与 locateProfile 相同的 include 层
+  //（chooseIncludeLayer），避免多层 include 时两者口径不一。
+  const layer = chooseIncludeLayer(ctx)
+  const prefix = layer?.id ? `${layer.id}:` : ''
   for (const entry of ctx.loader.entries()) {
     if (entry.options?.name !== packageName) continue
     let id = entry.options?.id ?? ''
