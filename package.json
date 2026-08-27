@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-mgr",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "DSH plugin that manages installed plugins in Settings → Plugins: list, enable/disable via patch layer, update check, uninstall.",
   "license": "MIT",
   "repository": {
