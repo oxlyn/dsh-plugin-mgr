@@ -2,8 +2,9 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig([
   {
-    // host 侧：cordis 插件入口（Node ESM；peer deps 与依赖不参与打包）
-    entry: ['src/index.ts'],
+    // host 侧：cordis 插件入口 + 单测专用导出 internal.ts（Node ESM；
+    // peer deps 与依赖不参与打包）
+    entry: ['src/index.ts', 'src/internal.ts'],
     format: 'esm',
     platform: 'node',
     sourcemap: false,

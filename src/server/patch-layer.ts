@@ -106,13 +106,27 @@ const ROW_ID_REJECT_REASON = (id: string) => `行 id ${id} 含特殊字符，拒
 
 export async function disableRows(patchPath: string, rowIds: string[]): Promise<{ ok: boolean; reason: string | null }> {
   return queuedWrite(async () => {
-    const state = readUserPatchState(patchPath)
     for (const id of rowIds) {
       if (!ROW_ID_RE.test(id)) return { ok: false, reason: ROW_ID_REJECT_REASON(id) }
-      if (state.disables.includes(id)) continue
-      const r = appendPatchEntry(patchPath, rowBlock(id, true))
-      if (!r.ok) return r
     }
+    let text = ''
+    try {
+      text = readFileSync(patchPath, 'utf8')
+    } catch { /* 无补丁文件：直接写入首行 */ }
+    const state = readUserPatchState(patchPath)
+    // 与 enableRows 同模式：内存拼好最终内容、结尾一次写回。追加前先移除同 id
+    // 的 forced 行，保持每 id 至多一行——行扫描器只认紧邻的 disabled 行，
+    // false+true 双行并存会让状态展示与卸载清理都失准。
+    let next = text
+    for (const id of rowIds) {
+      if (state.disables.includes(id)) continue
+      const forcedRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: false\r?\n`, 'gmu')
+      next = next.replace(forcedRe, '')
+      const base = next === '' ? '' : prepareAppend(next)
+      if (base === null) return { ok: false, reason: PATCH_CORRUPT_REASON }
+      next = `${base}${rowBlock(id, true)}`
+    }
+    if (next !== text) writeFileSync(patchPath, next)
     return { ok: true, reason: null }
   })
 }
@@ -135,8 +149,10 @@ export async function enableRows(patchPath: string, rowIds: string[]): Promise<{
       const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: true\r?\n`, 'gmu')
       if (blockRe.test(next)) {
         next = withPlaceholderRestored(next.replace(blockRe, ''))
-      } else if (!forced.includes(id)) {
-        // 低层（bundle/模板）压住了它：用 disabled: false 强制启用
+      }
+      if (!forced.includes(id)) {
+        // 低层（bundle/模板）可能压住该行，仅移除停用行不足以保证恢复运行：
+        // 启用一律落一条 disabled: false 强制行（与移除停用行不互斥，卸载时一并清理）
         const base = next === '' ? '' : prepareAppend(next)
         if (base === null) return { ok: false, reason: PATCH_CORRUPT_REASON }
         next = `${base}${rowBlock(id, false)}`

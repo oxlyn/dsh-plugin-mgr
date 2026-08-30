@@ -27,6 +27,23 @@ export async function readJsonBody(req: IncomingMessage): Promise<Record<string,
   return parsed as Record<string, unknown>
 }
 
+/**
+ * 同源校验：浏览器发起的跨站请求会带 Origin 头，与 Host 不一致即拒绝
+ * （兼防 DNS rebinding）；非浏览器客户端（curl 等）没有 Origin，放行。
+ * 与 Content-Type 校验叠加，作为状态变更路由的第二道 CSRF 门卫。
+ */
+export function isSameOrigin(req: IncomingMessage): boolean {
+  const origin = req.headers.origin
+  if (origin === undefined) return true
+  const host = req.headers.host
+  if (host === undefined) return false
+  try {
+    return new URL(origin).host.toLowerCase() === host.toLowerCase()
+  } catch {
+    return false
+  }
+}
+
 /** 包名参数校验：非空、无路径穿越/空字节、字符集白名单。 */
 export function isValidPackageName(pkg: unknown): pkg is string {
   return (

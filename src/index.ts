@@ -1,7 +1,7 @@
 // dsh-plugin-mgr — 已安装插件管理：设置 → 插件 → 「已安装管理」tab。
 //
-// 本文件只是入口：声明插件元数据、聚合单测导出、注册 HTTP 路由。
-// 业务实现按职责拆在 server/ 下：
+// 本文件只是入口：声明插件元数据、注册 HTTP 路由。纯逻辑的单测导出走
+// internal.ts（构建为 dist/internal.js，不进公共 API）。业务实现按职责拆在 server/ 下：
 //   paths.ts       profile / 用户补丁层定位
 //   patch-layer.ts 补丁层逐行读写（启停的落盘机制）
 //   rows.ts        每个包拥有的补丁行 id
@@ -17,45 +17,16 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { API } from './shared/api-paths.js'
 import { locateProfile } from './server/paths.js'
-import {
-  readUserPatchState,
-  appendPatchEntry,
-  prepareAppend,
-  rowBlock,
-  withPlaceholderRestored,
-  escapeRegExp,
-  disableRows,
-  enableRows,
-  removeRowBlocks,
-} from './server/patch-layer.js'
-import { runDshPlugin, failureText } from './server/lifecycle.js'
+import { disableRows, enableRows, removeRowBlocks } from './server/patch-layer.js'
+import { runDshPlugin } from './server/lifecycle.js'
 import { watchFiberFailures } from './server/fiber-watch.js'
-import { latestCache, collectUpdates, parseNpmrcRegistry, compareSemver, publishTimeOf } from './server/registry.js'
-import { listPlugins, cleanRepoUrl, sourceTypeOf } from './server/inspect.js'
-import { sendJson, readJsonBody, isValidPackageName } from './server/http.js'
+import { latestCache, collectUpdates } from './server/registry.js'
+import { listPlugins } from './server/inspect.js'
+import { isSameOrigin, sendJson, readJsonBody, isValidPackageName } from './server/http.js'
 import type { PluginRow } from './server/types.js'
 
 export const name = 'dsh-plugin-mgr'
 export const inject = ['webServer', 'loader']
-
-/** 内部纯逻辑导出：仅供单测（test/）使用，不属于插件对外 API。 */
-export const _internal = {
-  readUserPatchState,
-  appendPatchEntry,
-  prepareAppend,
-  rowBlock,
-  withPlaceholderRestored,
-  escapeRegExp,
-  disableRows,
-  enableRows,
-  removeRowBlocks,
-  cleanRepoUrl,
-  sourceTypeOf,
-  parseNpmrcRegistry,
-  compareSemver,
-  failureText,
-  publishTimeOf,
-}
 
 export function apply(ctx: Context) {
   const logger = ctx.logger(name)
@@ -79,6 +50,8 @@ export function apply(ctx: Context) {
     kind: 'exact',
     path: API.toggle,
     handler: async (req, res) => {
+      // 状态变更路由：拒绝跨站 Origin（非浏览器客户端无 Origin，不受影响）
+      if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, error: '已拒绝跨站请求' })
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
@@ -119,6 +92,8 @@ export function apply(ctx: Context) {
     kind: 'exact',
     path: API.uninstall,
     handler: async (req, res) => {
+      // 状态变更路由：拒绝跨站 Origin（非浏览器客户端无 Origin，不受影响）
+      if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, error: '已拒绝跨站请求' })
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
@@ -175,6 +150,8 @@ export function apply(ctx: Context) {
     kind: 'exact',
     path: API.update,
     handler: async (req, res) => {
+      // 状态变更路由：拒绝跨站 Origin（非浏览器客户端无 Origin，不受影响）
+      if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, error: '已拒绝跨站请求' })
       let body: Record<string, unknown>
       try {
         body = await readJsonBody(req)
@@ -210,20 +187,20 @@ export function apply(ctx: Context) {
       }
       // add 重铺 bundle 补丁行后，若更新前是停用状态，重读行并重新断言停用，
       // 避免更新把用户的启停选择冲掉。disableRows 幂等，已是停用则不动文件。
+      // 版本对账与行状态取自同一次 listPlugins（disableRows 不改版本），
+      // 省掉第二次全列表磁盘扫描。
+      let installed: string | null = null
       try {
         const fresh = listPlugins(ctx).plugins.find((p) => p.name === pkg)
         if (fresh !== undefined && wasDisabled && !fresh.disabled) {
           await disableRows(patchPath, fresh.rows)
         }
-      } catch { /* 刷新失败不影响更新结果 */ }
+        installed = fresh?.version ?? null
+      } catch { /* 刷新失败按未知处理，不影响更新结果 */ }
       latestCache.delete(pkg)
       // pnpm 的 minimumReleaseAge 供应链门禁会静默跳过「发布过新」的版本，
       // 以 exit 0 + Already up to date 收场——exit 码不代表真装上了。
       // 以磁盘实际版本对账，如实告诉前端。
-      let installed: string | null = null
-      try {
-        installed = listPlugins(ctx).plugins.find((p) => p.name === pkg)?.version ?? null
-      } catch { /* 读取失败按未知处理 */ }
       const updated =
         installed !== null && installed !== '-' &&
         (expectedLatest !== null ? installed === expectedLatest : installed !== current.version)

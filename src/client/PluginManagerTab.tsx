@@ -10,29 +10,18 @@ import { Toolbar } from './components/Toolbar'
 import { PluginCard } from './components/PluginCard'
 import { ConfirmModal } from './components/ConfirmModal'
 import type { LocaleService } from './types'
+import type { PluginRow, UpdateInfo } from '../shared/types'
 import type { ReactElement } from 'react'
 
 export interface ListData {
   ok: boolean
   error?: string
   profile: string
-  plugins: Array<{
-    name: string
-    version: string
-    spec: string
-    sourceType: 'local' | 'github' | 'npm'
-    repo: string | null
-    description: string
-    disabled: boolean
-    protected: boolean
-    rows: string[]
-    self: boolean
-    error: string | null
-  }>
+  plugins: PluginRow[]
 }
 
 export interface UpdatesMap {
-  [name: string]: { latest: string; update: boolean; publishedAt?: string | null } | undefined
+  [name: string]: UpdateInfo | undefined
 }
 
 export interface PluginManagerTabProps {

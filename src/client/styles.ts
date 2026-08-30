@@ -53,10 +53,12 @@ export const CSS = `
 .dshpm-card:hover { border-color:var(--dsw-alias-label-dimmed,#999); }
 .dshpm-card.is-open { background:var(--dsw-alias-bg-layer-2,#fafafa); border-color:var(--dsw-alias-label-dimmed,#999); }
 .dshpm-row { display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; user-select:none; min-width:0; }
-.dshpm-arrow { flex:none; width:20px; height:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--dsw-alias-label-tertiary,#888); transition:transform .16s,color .16s; }
+.dshpm-arrow { flex:none; width:20px; height:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; background:transparent; padding:0; font:inherit; color:var(--dsw-alias-label-tertiary,#888); transition:transform .16s,color .16s; }
 .dshpm-arrow:hover { color:var(--dsw-alias-label-primary,#333); }
 .dshpm-arrow.is-open { transform:rotate(180deg); }
 .dshpm-arrow svg { width:14px; height:14px; display:block; }
+/* 键盘可达性：switch 与展开按钮获得焦点时显示焦点环 */
+.dshpm-switch:focus-visible, .dshpm-arrow:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary,#1967d2); outline-offset:2px; }
 .dshpm-icon { width:36px; height:36px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--dsw-alias-label-secondary,#555); transition:opacity .16s; }
 .dshpm-icon svg { width:18px; height:18px; display:block; }
 .dshpm-card.is-off .dshpm-icon { opacity:.5; }

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { _internal } from '../dist/index.js'
+import { _internal } from '../dist/internal.js'
 
 const {
   readUserPatchState,
@@ -97,12 +97,12 @@ test('appendPatchEntry: 已有条目时补末尾换行后追加', (t) => {
 
 // ── disableRows / enableRows / removeRowBlocks ─────────────────────────────
 
-test('disable → enable 回环：块被移除、[] 占位恢复', async (t) => {
+test('disable → enable 回环：停用行被移除、留一条强制启用行', async (t) => {
   const { path, read } = tmpPatch(t, '# note\n[]\n')
   await disableRows(path, ['x'])
   assert.ok(read().includes('- id: x\n  disabled: true\n'), read())
   await enableRows(path, ['x'])
-  assert.equal(read(), '# note\n[]\n')
+  assert.equal(read(), '# note\n# []\n- id: x\n  disabled: false\n')
 })
 
 test('disableRows: 重复禁用幂等', async (t) => {
@@ -127,12 +127,12 @@ test('enableRows: 强制启用行在写回后保留（回归：曾被旧内容�
   assert.ok(read().includes('- id: a\n  disabled: false\n'), read())
 })
 
-test('enableRows: 多行混合——删除块与强制追加同时生效（回归）', async (t) => {
+test('enableRows: 多行混合——移除停用行与强制启用同时生效（回归）', async (t) => {
   const { path, read } = tmpPatch(t, '- id: a\n  disabled: true\n')
   const r = await enableRows(path, ['a', 'b'])
   assert.equal(r.ok, true)
   const text = read()
-  assert.ok(!text.includes('id: a\n'), text)
+  assert.ok(text.includes('- id: a\n  disabled: false\n'), text)
   assert.ok(text.includes('- id: b\n  disabled: false\n'), text)
 })
 
@@ -153,7 +153,13 @@ test('enableRows: 同一 id 的多行停用块全部移除', async (t) => {
   const { path, read } = tmpPatch(t, '- id: x\n  disabled: true\n- id: x\n  disabled: true\n')
   const r = await enableRows(path, ['x'])
   assert.equal(r.ok, true)
-  assert.equal(read(), '[]\n')
+  assert.equal(read(), '# []\n- id: x\n  disabled: false\n')
+})
+
+test('enableRows: 移除停用行后强补强制启用行（防低层 bundle 的 disabled 压制复活）', async (t) => {
+  const { path, read } = tmpPatch(t, '- id: x\n  disabled: true\n')
+  await enableRows(path, ['x'])
+  assert.equal(read(), '# []\n- id: x\n  disabled: false\n')
 })
 
 test('removeRowBlocks: 移除 true/false 行并恢复 [] 占位', async (t) => {
@@ -168,10 +174,32 @@ test('removeRowBlocks: 带引号 id 也能移除', async (t) => {
   assert.equal(read(), '[]\n')
 })
 
-test('removeRowBlocks: enable→disable 写回的 false+true 双行全部清除（回归：曾残留孤儿停用行，重装后被静默停用）', async (t) => {
+test('disableRows: 追加停用前移除同 id 的 forced 行（每 id 至多一行）', async (t) => {
+  const { path, read } = tmpPatch(t, '- id: x\n  disabled: false\n')
+  await disableRows(path, ['x'])
+  assert.equal(read(), '- id: x\n  disabled: true\n')
+})
+
+test('启停回环：enable→disable→enable 后每 id 至多一行', async (t) => {
+  const { path, read } = tmpPatch(t, '[]\n')
+  await enableRows(path, ['x'])
+  assert.equal(read(), '# []\n- id: x\n  disabled: false\n')
+  await disableRows(path, ['x'])
+  assert.equal(read(), '# []\n- id: x\n  disabled: true\n')
+  await enableRows(path, ['x'])
+  assert.equal(read(), '# []\n- id: x\n  disabled: false\n')
+})
+
+test('removeRowBlocks: enable→disable→卸载清理后无残留（回归：曾残留孤儿停用行，重装后被静默停用）', async (t) => {
   const { path, read } = tmpPatch(t, '[]\n')
   await enableRows(path, ['x']) // 写入 disabled: false 强制行
-  await disableRows(path, ['x']) // 追加 disabled: true，此时同一 id 两行并存
+  await disableRows(path, ['x']) // 停用：移除 forced 行后只剩停用行
+  await removeRowBlocks(path, ['x'])
+  assert.equal(read(), '[]\n')
+})
+
+test('removeRowBlocks: 同一 id 的多行块全部移除（手工编辑重复行）', async (t) => {
+  const { path, read } = tmpPatch(t, '- id: x\n  disabled: true\n- id: x\n  disabled: true\n')
   await removeRowBlocks(path, ['x'])
   assert.equal(read(), '[]\n')
 })

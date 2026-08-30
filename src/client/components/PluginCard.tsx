@@ -3,27 +3,8 @@
 
 import { getReact } from '../runtime'
 import { fmt } from '../i18n'
+import type { PluginRow, UpdateInfo } from '../../shared/types'
 import type { ReactElement } from 'react'
-
-export interface PluginRow {
-  name: string
-  version: string
-  spec: string
-  sourceType: 'local' | 'github' | 'npm'
-  repo: string | null
-  description: string
-  disabled: boolean
-  protected: boolean
-  rows: string[]
-  self: boolean
-  error: string | null
-}
-
-export interface UpdateInfo {
-  latest: string
-  update: boolean
-  publishedAt?: string | null
-}
 
 export interface PendingState {
   [name: string]: 'toggle' | 'uninstall' | 'update' | undefined
@@ -103,18 +84,32 @@ export function PluginCard(props: PluginCardProps): ReactElement {
             role="switch"
             aria-checked={on ? 'true' : 'false'}
             aria-label={fmt(t('switchAria'), row.name)}
+            aria-disabled={!canToggle || busy}
+            tabIndex={canToggle ? 0 : -1}
             className={switchCls}
             title={switchTitle}
             onClick={(e) => {
               e.stopPropagation()
               if (canToggle && !busy) onToggle()
             }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return
+              e.preventDefault()
+              e.stopPropagation()
+              if (canToggle && !busy) onToggle()
+            }}
           >
             <span className="dshpm-knob" />
           </span>
-          <span
+          <button
+            type="button"
             className={`dshpm-arrow${open ? ' is-open' : ''}`}
             aria-label={open ? t('collapse') : t('expand')}
+            aria-expanded={open ? 'true' : 'false'}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleExpand()
+            }}
           >
             <svg
               viewBox="0 0 24 24"
@@ -126,7 +121,7 @@ export function PluginCard(props: PluginCardProps): ReactElement {
             >
               <path d="M6 9l6 6 6-6" />
             </svg>
-          </span>
+          </button>
         </div>
       </div>
       {open ? (

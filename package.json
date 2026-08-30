@@ -3,6 +3,9 @@
   "version": "0.2.7",
   "description": "DSH plugin that manages installed plugins in Settings → Plugins: list, enable/disable via patch layer, update check, uninstall.",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/oxlyn/dsh-plugin-mgr.git"

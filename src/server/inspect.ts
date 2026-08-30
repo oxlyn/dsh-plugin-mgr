@@ -1,6 +1,7 @@
 // 已安装插件列表：读 profile manifest + 补丁状态 + 运行失败，组装成展示行。
 
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PluginRow } from './types.js'
@@ -113,5 +114,15 @@ export function listPlugins(ctx: Context): { profile: string; plugins: PluginRow
   return { profile, plugins }
 }
 
-/** 本包名：listPlugins 用它标记 self 行（与 package.json name 保持一致）。 */
-const SELF_NAME = 'dsh-plugin-mgr'
+/**
+ * 本包名：listPlugins 用它标记 self 行。从自身 package.json 读取，
+ * 包改名后自保护不失效；读不到时退回构建期常量。
+ */
+export const SELF_NAME = (() => {
+  try {
+    const manifest = createRequire(import.meta.url)('../package.json') as { name?: unknown }
+    return typeof manifest.name === 'string' && manifest.name !== '' ? manifest.name : 'dsh-plugin-mgr'
+  } catch {
+    return 'dsh-plugin-mgr'
+  }
+})()

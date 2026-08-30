@@ -23,23 +23,9 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** 已安装列表里的一行插件。 */
-export interface PluginRow {
-  name: string
-  version: string
-  spec: string
-  /** 来源分类：local（link/file）| github | npm（语义化版本） */
-  sourceType: 'local' | 'github' | 'npm'
-  /** 插件包声明的仓库地址（github.com/user/repo 形式），无则 null */
-  repo: string | null
-  description: string
-  disabled: boolean
-  protected: boolean
-  rows: string[]
-  self: boolean
-  /** 运行失败信息（fiber FAILED 捕获）；运行正常为 null */
-  error: string | null
-}
+// 展示模型（PluginRow / UpdateInfo）已收拢到 src/shared/types.ts 与 client
+// 共用，此处转出口以维持 server 内部既有 import 路径稳定。
+export type { PluginRow, UpdateInfo } from '../shared/types.js'
 
 /** 用户补丁层里的逐行启停状态。 */
 export interface PatchState {

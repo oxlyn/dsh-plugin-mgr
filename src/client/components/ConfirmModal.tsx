@@ -3,6 +3,7 @@
 
 import { getReact, getRequire } from '../runtime'
 import { fmt } from '../i18n'
+import type { UpdateInfo } from '../../shared/types'
 import type { ReactElement } from 'react'
 
 export interface ConfirmRow {
@@ -18,7 +19,7 @@ export interface ConfirmState {
 }
 
 export interface UpdatesMap {
-  [name: string]: { latest: string } | undefined
+  [name: string]: UpdateInfo | undefined
 }
 
 export interface ConfirmModalProps {

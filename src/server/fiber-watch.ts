@@ -11,13 +11,14 @@ import { failureText } from './lifecycle.js'
  */
 const FIBER_ACTIVE = 2
 const FIBER_FAILED = 3
+const FIBER_DISPOSED = 4
 
-/** 运行失败记录：包名 → 失败信息（同一包只留最近一条；恢复运行即清除）。 */
-const runtimeFailures = new Map<string, { message: string; at: number }>()
+/** 运行失败记录：包名 → 最近一次失败信息；恢复运行或 fiber 销毁即清除。 */
+const runtimeFailures = new Map<string, string>()
 
 /** 列表展示用：某包当前的运行失败信息；无失败为 null。 */
 export function runtimeFailureOf(pkg: string): string | null {
-  return runtimeFailures.get(pkg)?.message ?? null
+  return runtimeFailures.get(pkg) ?? null
 }
 
 /**
@@ -35,9 +36,11 @@ export function watchFiberFailures(ctx: Context): void {
     if (typeof pkg !== 'string' || pkg === '') return
     if (fiber.state === FIBER_FAILED) {
       fiber.await().catch((e: unknown) => {
-        runtimeFailures.set(pkg, { message: failureText(e), at: Date.now() })
+        runtimeFailures.set(pkg, failureText(e))
       })
-    } else if (fiber.state === FIBER_ACTIVE) {
+    } else if (fiber.state === FIBER_ACTIVE || fiber.state === FIBER_DISPOSED) {
+      // 回 ACTIVE 视为已恢复（HMR 修复 / 配置回滚后重启成功）；DISPOSED 清记录
+      // 兜底「插件在 FAILED 状态被卸载」——否则条目无人清除，常驻内存。
       runtimeFailures.delete(pkg)
     }
   }, { global: true })

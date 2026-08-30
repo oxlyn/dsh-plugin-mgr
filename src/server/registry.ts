@@ -5,12 +5,16 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Semver } from './types.js'
+import type { UpdateInfo } from '../shared/types.js'
 import { locateProfile } from './paths.js'
 import { listPlugins } from './inspect.js'
 
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org'
 const LATEST_CACHE_TTL_MS = 5 * 60 * 1000
 const LATEST_FETCH_TIMEOUT_MS = 8 * 1000
+const REGISTRY_TTL_MS = 5 * 60 * 1000
+/** registry 突发请求的并发上限：插件多时分批拉取，不一次打满连接。 */
+const UPDATE_FETCH_CONCURRENCY = 8
 
 /** 解析 .npmrc 文本中的 registry= 行（跳过注释、去引号）。 */
 export function parseNpmrcRegistry(text: string): string | null {
@@ -24,15 +28,18 @@ export function parseNpmrcRegistry(text: string): string | null {
   return null
 }
 
-let cachedRegistry: string | null = null
+let cachedRegistry: { value: string; at: number } | null = null
 
 /**
  * registry 取用顺序：DSH_PLUGIN_MGR_REGISTRY 环境变量 > npm_config_registry >
  * profile/.npmrc > ~/.npmrc > npmjs.org。国内镜像（npmmirror 等）配在 .npmrc
  * 即可被识别，与 dsh CLI 安装时的取包来源保持一致。
+ * 结果带 TTL：改 .npmrc / 环境变量后最多 5 分钟生效，无需重启宿主。
  */
 export function resolveRegistry(profileDir: string): string {
-  if (cachedRegistry !== null) return cachedRegistry
+  if (cachedRegistry !== null && Date.now() - cachedRegistry.at < REGISTRY_TTL_MS) {
+    return cachedRegistry.value
+  }
   const candidates: (string | null | undefined)[] = [
     process.env.DSH_PLUGIN_MGR_REGISTRY,
     process.env.npm_config_registry,
@@ -42,14 +49,15 @@ export function resolveRegistry(profileDir: string): string {
       candidates.push(parseNpmrcRegistry(readFileSync(npmrc, 'utf8')))
     } catch { /* 无该文件 */ }
   }
+  let resolved: string | null = null
   for (const c of candidates) {
     if (typeof c === 'string' && c !== '') {
-      cachedRegistry = c
-      return c
+      resolved = c
+      break
     }
   }
-  cachedRegistry = DEFAULT_REGISTRY
-  return DEFAULT_REGISTRY
+  cachedRegistry = { value: resolved ?? DEFAULT_REGISTRY, at: Date.now() }
+  return cachedRegistry.value
 }
 
 /** 宽松解析 `v?1.2.3[-pre.1]`；非语义化版本返回 null。 */
@@ -141,11 +149,34 @@ async function fetchPublishTime(name: string, version: string, registry: string)
   return publishTimeOf(await resp.json(), version)
 }
 
+/** 有界并发的 allSettled：等价 Promise.allSettled(items.map(fn))，但同时在飞的最多 limit 个。 */
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  let cursor = 0
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (cursor < items.length) {
+        const index = cursor++
+        try {
+          results[index] = { status: 'fulfilled', value: await fn(items[index]) }
+        } catch (reason) {
+          results[index] = { status: 'rejected', reason }
+        }
+      }
+    }),
+  )
+  return results
+}
+
 /**
  * 拉取 npm 来源插件的可更新信息。只对 npm 源（semver spec）检查——
  * github/local 源的「最新」不在 npm registry 上，无从比对。
  */
-export async function collectUpdates(ctx: Context): Promise<Record<string, { latest: string; update: boolean; publishedAt?: string | null }>> {
+export async function collectUpdates(ctx: Context): Promise<Record<string, UpdateInfo>> {
   const { patchPath } = locateProfile(ctx)
   const registry = resolveRegistry(dirname(patchPath))
   const npmPlugins = listPlugins(ctx).plugins.filter(
@@ -158,18 +189,16 @@ export async function collectUpdates(ctx: Context): Promise<Record<string, { lat
   })
   // 单包失败不拖垮整批：其余照常返回，失败的下轮再查。
   // TTL 刷新后 latest 版本没变时保留已查到的发布时间（同版本的时间不可变）。
-  await Promise.allSettled(
-    stale.map(async (p) => {
-      const latest = await fetchLatestVersion(p.name, registry)
-      const prev = latestCache.get(p.name)
-      latestCache.set(p.name, {
-        latest,
-        fetchedAt: Date.now(),
-        publishedAt: prev !== undefined && prev.latest === latest ? prev.publishedAt : undefined,
-      })
-    }),
-  )
-  const updates: Record<string, { latest: string; update: boolean; publishedAt?: string | null }> = {}
+  await mapLimit(stale, UPDATE_FETCH_CONCURRENCY, async (p) => {
+    const latest = await fetchLatestVersion(p.name, registry)
+    const prev = latestCache.get(p.name)
+    latestCache.set(p.name, {
+      latest,
+      fetchedAt: Date.now(),
+      publishedAt: prev !== undefined && prev.latest === latest ? prev.publishedAt : undefined,
+    })
+  })
+  const updates: Record<string, UpdateInfo> = {}
   const needTime: string[] = []
   for (const p of npmPlugins) {
     const c = latestCache.get(p.name)
@@ -184,14 +213,12 @@ export async function collectUpdates(ctx: Context): Promise<Record<string, { lat
   // 惰性补查发布时间：只有确认有更新的包才拉一次完整 packument（体量比
   // /latest 大一个量级，没必要为「已是最新」的包多传几十 KB）。
   // 查询失败不写缓存：下一次 /updates 自愈重试。
-  await Promise.allSettled(
-    needTime.map(async (pkg) => {
-      const c = latestCache.get(pkg)
-      if (c === undefined) return
-      const at = await fetchPublishTime(pkg, c.latest, registry)
-      c.publishedAt = at
-      if (updates[pkg] !== undefined) updates[pkg].publishedAt = at
-    }),
-  )
+  await mapLimit(needTime, UPDATE_FETCH_CONCURRENCY, async (pkg) => {
+    const c = latestCache.get(pkg)
+    if (c === undefined) return
+    const at = await fetchPublishTime(pkg, c.latest, registry)
+    c.publishedAt = at
+    if (updates[pkg] !== undefined) updates[pkg].publishedAt = at
+  })
   return updates
 }
