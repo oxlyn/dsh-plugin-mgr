@@ -131,7 +131,8 @@ export async function enableRows(patchPath: string, rowIds: string[]): Promise<{
     // 整文件回写覆盖（追加的强制启用行凭空消失），多行混合场景同理。
     let next = text
     for (const id of rowIds) {
-      const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: true\r?\n`, 'mu')
+      // g 标志：enable→disable 混合写回或手工编辑可能让同一 id 出现多行，全部移除
+      const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: true\r?\n`, 'gmu')
       if (blockRe.test(next)) {
         next = withPlaceholderRestored(next.replace(blockRe, ''))
       } else if (!forced.includes(id)) {
@@ -157,7 +158,8 @@ export async function removeRowBlocks(patchPath: string, rowIds: string[]): Prom
     }
     let next = text
     for (const id of rowIds) {
-      const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: (?:true|false)\r?\n`, 'mu')
+      // g 标志：同一 id 可能同时有 forced 行与停用行（enable→disable 写回），必须全部移除
+      const blockRe = new RegExp(`^- id: ['"]?${escapeRegExp(id)}['"]?\r?\n  disabled: (?:true|false)\r?\n`, 'gmu')
       next = next.replace(blockRe, '')
     }
     if (next !== text) writeFileSync(patchPath, withPlaceholderRestored(next))
