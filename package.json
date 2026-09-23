@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-mgr",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "DSH plugin that manages installed plugins in Settings → Plugins: list, enable/disable via patch layer, update check, uninstall.",
   "license": "MIT",
   "engines": {
@@ -44,11 +44,11 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.8"
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.8"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.8",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.18",
