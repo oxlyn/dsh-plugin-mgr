@@ -16,7 +16,7 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       '@deepseek-ai/dsh-tools':
-        specifier: 0.1.0-rc.8
+        specifier: ^0.1.0-rc.8
         version: 0.1.0-rc.8(ac9081d1e007de8a90a707560a8ae1c3)
       '@types/js-yaml':
         specifier: ^4.0.9
