@@ -5,5 +5,7 @@
       <stop offset="1" stop-color="#324DE2"/>
     </linearGradient>
   </defs>
-  <path d="M7 9H14A4 4 0 0 1 22 9H29V31H7V24A4 4 0 0 0 7 16Z" stroke="url(#mgr)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(18 18) scale(0.86) translate(-18 -18)">
+    <path d="M7 9H14A4 4 0 0 1 22 9H29V31H7V24A4 4 0 0 0 7 16Z" stroke="url(#mgr)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
