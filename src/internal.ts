@@ -15,10 +15,12 @@ import {
   removeRowBlocks,
 } from './server/patch-layer.js'
 import { failureText } from './server/lifecycle.js'
+import { managerResult } from './server/manager.js'
 import { chooseIncludeLayer, locateProfile } from './server/paths.js'
 import { parseNpmrcRegistry, compareSemver, publishTimeOf } from './server/registry.js'
 import { cleanRepoUrl, sourceTypeOf, SELF_NAME } from './server/inspect.js'
 import { isSameOrigin, isValidPackageName } from './server/http.js'
+import { isRenderableComponent } from './client/runtime.js'
 
 export const _internal = {
   // patch-layer
@@ -44,7 +46,11 @@ export const _internal = {
   locateProfile,
   // lifecycle
   failureText,
+  // manager
+  managerResult,
   // http
   isSameOrigin,
   isValidPackageName,
+  // client runtime
+  isRenderableComponent,
 }

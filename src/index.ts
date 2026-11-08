@@ -5,7 +5,9 @@
 //   paths.ts       profile / 用户补丁层定位
 //   patch-layer.ts 补丁层逐行读写（启停的落盘机制）
 //   rows.ts        每个包拥有的补丁行 id
-//   lifecycle.ts   调 dsh CLI 子进程（卸载/更新）
+//   lifecycle.ts   调 dsh CLI 子进程（卸载/更新的 CLI 回退路径）
+//   manager.ts     宿主 pluginManager 服务进程内调用（桌面端首选，CLI 按名字
+//                  拒绝 desktop profile 的包操作——桌面端不允许调命令）
 //   fiber-watch.ts 运行失败捕获（fiber FAILED 归因到包）
 //   registry.ts    npm registry 更新检查（semver / .npmrc / packument）
 //   inspect.ts     已安装列表组装
@@ -19,6 +21,7 @@ import { API } from './shared/api-paths.js'
 import { locateProfile } from './server/paths.js'
 import { disableRows, enableRows, removeRowBlocks } from './server/patch-layer.js'
 import { runDshPlugin } from './server/lifecycle.js'
+import { managerInstall, managerRemove, pluginManagerOf } from './server/manager.js'
 import { watchFiberFailures } from './server/fiber-watch.js'
 import { latestCache, collectUpdates } from './server/registry.js'
 import { listPlugins } from './server/inspect.js'
@@ -118,15 +121,20 @@ export function apply(ctx: Context) {
       if (current.self && !body.selfConfirm) {
         return sendJson(res, 400, { ok: false, error: '卸载自身需要 selfConfirm: true（面板已自动携带）' })
       }
-      // 先清理补丁层启停行，再让 dsh CLI 移除依赖与 bundle。
+      // 先清理补丁层启停行，再移除依赖与 bundle。桌面端走宿主 pluginManager
+      // 服务（进程内，官方桌面端不允许调命令）；其余宿主回退 dsh CLI 子进程。
       // CLI 运行期间新到的 toggle 请求可能又写回启停行，成功后再清一次兜底。
       await removeRowBlocks(patchPath, current.rows)
-      const result = await runDshPlugin(profile, ['remove', pkg])
+      const manager = pluginManagerOf(ctx)
+      const result = manager !== undefined
+        ? await managerRemove(manager, pkg)
+        : await runDshPlugin(profile, ['remove', pkg])
       if (result.code !== 0) {
-        return sendJson(res, 500, { ok: false, error: `dsh plugin remove 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
+        const via = manager !== undefined ? 'pluginManager 服务' : 'dsh plugin remove'
+        return sendJson(res, 500, { ok: false, error: `${via} 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
       }
       await removeRowBlocks(patchPath, current.rows)
-      logger.info(`uninstalled ${pkg} from profile ${profile}`)
+      logger.info(`uninstalled ${pkg} from profile ${profile} via ${manager !== undefined ? 'pluginManager service' : 'dsh CLI'}`)
       sendJson(res, 200, { ok: true, name: pkg, output: result.output.slice(-500) })
     },
   })
@@ -181,9 +189,23 @@ export function apply(ctx: Context) {
       }
       const wasDisabled = current.disabled
       const expectedLatest = latestCache.get(pkg)?.latest ?? null
-      const result = await runDshPlugin(profile, ['add', `${pkg}@latest`])
+      // 桌面端/基础 profile 走宿主 pluginManager 服务（进程内；CLI 按名字拒绝
+      // desktop profile 的包操作）。服务对已安装包名直接拒绝 install
+      // （already-installed），所以更新 = removeBundle → installBundle——
+      // 与官方设置页「显式更新」同款语义。enabled 控制装后是否激活，停用
+      // 状态得以保留。其余宿主回退 dsh CLI 子进程原位 add。
+      const manager = pluginManagerOf(ctx)
+      const result =
+        manager !== undefined
+          ? await (async () => {
+              const removed = await managerRemove(manager, pkg)
+              if (removed.code !== 0) return removed
+              return managerInstall(manager, `${pkg}@latest`, !wasDisabled)
+            })()
+          : await runDshPlugin(profile, ['add', `${pkg}@latest`])
       if (result.code !== 0) {
-        return sendJson(res, 500, { ok: false, error: `dsh plugin add 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
+        const via = manager !== undefined ? 'pluginManager 服务' : 'dsh plugin add'
+        return sendJson(res, 500, { ok: false, error: `${via} 失败（exit ${result.code}）：${result.output.slice(-1500)}` })
       }
       // add 重铺 bundle 补丁行后，若更新前是停用状态，重读行并重新断言停用，
       // 避免更新把用户的启停选择冲掉。disableRows 幂等，已是停用则不动文件。
@@ -204,7 +226,10 @@ export function apply(ctx: Context) {
       const updated =
         installed !== null && installed !== '-' &&
         (expectedLatest !== null ? installed === expectedLatest : installed !== current.version)
-      logger.info(`updated ${pkg} to ${installed ?? '?'} in profile ${profile}`)
+      logger.info(
+        `updated ${pkg} to ${installed ?? '?'} in profile ${profile} via ` +
+          `${manager !== undefined ? 'pluginManager service' : 'dsh CLI'}`,
+      )
       sendJson(res, 200, {
         ok: true, name: pkg, version: installed,
         expected: expectedLatest, updated,

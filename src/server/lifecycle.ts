@@ -1,4 +1,6 @@
 // 通过 dsh CLI 子进程执行卸载/更新（spawn `dsh plugin ...`）。
+// 仅作回退路径：桌面端 profile 由应用自管，CLI 按名字拒绝 `--profile desktop`，
+// 宿主提供 pluginManager 服务时走 manager.ts 的进程内接口。
 
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'

@@ -18,7 +18,7 @@
 | 1 | Installed plugin list | Card layout with single / two column toggle (preference remembered); shows name, version, running state, and an enable/disable switch |
 | 2 | Enable / disable | Writes `disabled: true/false` through the profile user patch layer (`cordis.patch.yml`); DSH HMR applies it in ~1s, survives restarts |
 | 3 | Expandable details | Click a card to expand: version / source (npm·GitHub·local classification + version range + clickable repository link) / description |
-| 4 | Uninstall | Uninstall button in the expanded details (with confirmation); cleans up patch rows first, then runs `dsh plugin --profile <name> remove <pkg>` |
+| 4 | Uninstall | Uninstall button in the expanded details (with confirmation); cleans up patch rows first, then removes the package via the host `pluginManager` service in-process (desktop / base-backed profiles), falling back to a `dsh plugin --profile <name> remove <pkg>` subprocess where the service is absent |
 | 5 | Update check + one-click update | npm-sourced plugins are compared against the registry latest (results cached 5min); outdated cards show an "Update" badge and the details offer one-click update to latest; existing enable/disable state is preserved across updates; the latest version's npm publish time is fetched lazily and shown for outdated packages only |
 | 6 | Search | Toolbar search box (matches name/description/spec, case-insensitive); the count shows "x / y" while filtering, with a one-click clear when nothing matches |
 | 7 | Runtime error display | Listens to the host fiber status events: a plugin that failed to load gets a red "Load failed" state on its card with the error message in its details; recovery (HMR fix / rollback restart) clears it automatically |
@@ -44,8 +44,10 @@ The plugin consists of a host side and a client side (declared via the `dsh.clie
 │    GET  /api/plugin-manager/list     reads profile deps + patch   │
 │    GET  /api/plugin-manager/updates  compares npm registry latest │
 │    POST /api/plugin-manager/toggle   enable/disable (patch layer) │
-│    POST /api/plugin-manager/uninstall spawns dsh plugin remove    │
-│    POST /api/plugin-manager/update   spawns dsh plugin add @latest│
+│    POST /api/plugin-manager/uninstall pluginManager.removeBundle  │
+│    │                                  or spawns dsh plugin remove │
+│    POST /api/plugin-manager/update   pluginManager remove+install │
+│    │                                  or spawns dsh plugin add    │
 │  profile location: the loader's cordis:include entry path         │
 └──────────────────────────────────────────────────────────────────┘
                           │ fetch (JSON)
@@ -113,7 +115,8 @@ dsh-plugin-mgr/
 │   ├── paths.ts              #   profile / user patch-layer location
 │   ├── patch-layer.ts        #   patch-layer line-level read/write (enable/disable)
 │   ├── rows.ts               #   patch row ids owned by each package
-│   ├── lifecycle.ts          #   dsh CLI subprocess (uninstall/update)
+│   ├── manager.ts            #   host pluginManager service (in-process; desktop path)
+│   ├── lifecycle.ts          #   dsh CLI subprocess (fallback without the service)
 │   ├── fiber-watch.ts        #   runtime failure capture (fiber FAILED attribution)
 │   ├── registry.ts           #   npm update check (semver/.npmrc/packument)
 │   ├── inspect.ts            #   installed-list assembly

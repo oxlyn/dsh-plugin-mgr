@@ -8,7 +8,7 @@ import { get, post, API } from './api'
 import { useToasts, ToastHost } from './toast'
 import { Toolbar } from './components/Toolbar'
 import { PluginCard } from './components/PluginCard'
-import { ConfirmModal } from './components/ConfirmModal'
+import { ConfirmModal, platformModalAvailable } from './components/ConfirmModal'
 import type { LocaleService } from './types'
 import type { PluginRow, UpdateInfo } from '../shared/types'
 import type { ReactElement } from 'react'
@@ -222,12 +222,33 @@ export function PluginManagerTab({ t, locale }: PluginManagerTabProps): ReactEle
     }
   }
 
-  // 确认门：无平台 Modal 时调用方走原生 window.confirm（不渲染本组件）
+  // 确认门：优先平台 Modal（ConfirmModal）；宿主原语缺席（探测失败/旧宿主）
+  // 时回退原生 window.confirm——确认文案与平台 Modal 标题一致，
+  // 保证更新/卸载按钮在任何宿主上都有响应，而不是点了没动静。
+  const confirmText = (kind: 'update' | 'uninstall', row: ListData['plugins'][0]): string => {
+    const text =
+      kind === 'update'
+        ? fmt(t('confirmUpdate'), row.name, updates[row.name]?.latest || '')
+        : row.version !== '-'
+          ? fmt(t('confirmUninstall'), row.name, row.version)
+          : fmt(t('confirmUninstallNoVer'), row.name)
+    const selfNote = row.self ? (kind === 'update' ? t('confirmUpdateSelf') : t('confirmSelf')) : null
+    return selfNote !== null ? `${text}\n${selfNote}` : text
+  }
+
   const beginUninstall = (row: ListData['plugins'][0]) => {
+    if (!platformModalAvailable()) {
+      if (window.confirm(confirmText('uninstall', row))) uninstall(row)
+      return
+    }
     setConfirming({ kind: 'uninstall', row: { name: row.name, version: row.version, self: row.self, protected: row.protected } })
   }
 
   const beginUpdate = (row: ListData['plugins'][0]) => {
+    if (!platformModalAvailable()) {
+      if (window.confirm(confirmText('update', row))) update(row)
+      return
+    }
     setConfirming({ kind: 'update', row: { name: row.name, version: row.version, self: row.self, protected: row.protected } })
   }
 

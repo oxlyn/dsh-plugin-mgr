@@ -34,3 +34,13 @@ export function getRequire(): (id: string) => any {
   }
   return injectedRequire
 }
+
+/**
+ * 宿主注入的值是否可以直接作为 React 组件渲染。
+ * 组件可能是函数，也可能是 forwardRef / memo 包装出的带 $$typeof 的对象
+ * （宿主 0.2.0 起 Button 即 forwardRef）；宿主坏 shim 给出的字符串等一律不算。
+ */
+export function isRenderableComponent(value: unknown): boolean {
+  if (typeof value === 'function') return true
+  return value !== null && typeof value === 'object' && '$$typeof' in (value as object)
+}
